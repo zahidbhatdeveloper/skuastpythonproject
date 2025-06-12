@@ -1,0 +1,29 @@
+Tree ID,Tree Species,Chemical Compound,Concentration,Measurement Date,Location,Season,Tree Age (years),pH Level,Soil Type,Fruit Stage,Yield (kg),Fruit Count,Average Fruit Weight (g),Fruit Size (cm),Fruit Color,Harvest Date,Irrigation (mm),Fertilizer Applied (kg),Pruning Status,Weather Condition
+A001,Apple,Sugars,3.2,2024-01-15,Orchard A,Winter,5,6.5,Loamy,Maturation,25.5,85,300,8.5,Red,2024-02-15,35,3.5,Pruned,Sunny
+A001,Apple,Malic Acid,1.2,2024-01-15,Orchard A,Winter,5,6.5,Loamy,Maturation,25.5,85,300,8.5,Red,2024-02-15,35,3.5,Pruned,Sunny
+A001,Apple,Vitamin C,0.6,2024-01-15,Orchard A,Winter,5,6.5,Loamy,Maturation,25.5,85,300,8.5,Red,2024-02-15,35,3.5,Pruned,Sunny
+A001,Apple,Chlorophyll,2.5,2024-01-15,Orchard A,Winter,5,6.5,Loamy,Maturation,25.5,85,300,8.5,Red,2024-02-15,35,3.5,Pruned,Sunny
+A001,Apple,Anthocyanins,4.0,2024-01-15,Orchard A,Winter,5,6.5,Loamy,Maturation,25.5,85,300,8.5,Red,2024-02-15,35,3.5,Pruned,Sunny
+A001,Apple,Pectin,1.5,2024-01-15,Orchard A,Winter,5,6.5,Loamy,Maturation,25.5,85,300,8.5,Red,2024-02-15,35,3.5,Pruned,Sunny
+A001,Apple,Fiber,2.1,2024-01-15,Orchard A,Winter,5,6.5,Loamy,Maturation,25.5,85,300,8.5,Red,2024-02-15,35,3.5,Pruned,Sunny
+A002,Apple,Sugars,2.8,2024-01-15,Orchard B,Winter,4,6.8,Sandy,Growth,18.2,65,280,7.8,Green,2024-02-20,32,3.2,Pruned,Sunny
+A002,Apple,Malic Acid,1.0,2024-01-15,Orchard B,Winter,4,6.8,Sandy,Growth,18.2,65,280,7.8,Green,2024-02-20,32,3.2,Pruned,Sunny
+A002,Apple,Vitamin C,0.5,2024-01-15,Orchard B,Winter,4,6.8,Sandy,Growth,18.2,65,280,7.8,Green,2024-02-20,32,3.2,Pruned,Sunny
+A002,Apple,Chlorophyll,2.2,2024-01-15,Orchard B,Winter,4,6.8,Sandy,Growth,18.2,65,280,7.8,Green,2024-02-20,32,3.2,Pruned,Sunny
+A002,Apple,Anthocyanins,3.8,2024-01-15,Orchard B,Winter,4,6.8,Sandy,Growth,18.2,65,280,7.8,Green,2024-02-20,32,3.2,Pruned,Sunny
+A002,Apple,Pectin,1.3,2024-01-15,Orchard B,Winter,4,6.8,Sandy,Growth,18.2,65,280,7.8,Green,2024-02-20,32,3.2,Pruned,Sunny
+A002,Apple,Fiber,1.9,2024-01-15,Orchard B,Winter,4,6.8,Sandy,Growth,18.2,65,280,7.8,Green,2024-02-20,32,3.2,Pruned,Sunny
+C001,Cherry,Sugars,3.5,2024-01-15,Orchard C,Winter,6,6.3,Loamy,Ripening,12.8,320,40,2.5,Dark Red,2024-02-10,38,3.8,Pruned,Sunny
+C001,Cherry,Malic Acid,1.3,2024-01-15,Orchard C,Winter,6,6.3,Loamy,Ripening,12.8,320,40,2.5,Dark Red,2024-02-10,38,3.8,Pruned,Sunny
+C001,Cherry,Vitamin C,0.7,2024-01-15,Orchard C,Winter,6,6.3,Loamy,Ripening,12.8,320,40,2.5,Dark Red,2024-02-10,38,3.8,Pruned,Sunny
+C001,Cherry,Chlorophyll,2.3,2024-01-15,Orchard C,Winter,6,6.3,Loamy,Ripening,12.8,320,40,2.5,Dark Red,2024-02-10,38,3.8,Pruned,Sunny
+C001,Cherry,Anthocyanins,4.2,2024-01-15,Orchard C,Winter,6,6.3,Loamy,Ripening,12.8,320,40,2.5,Dark Red,2024-02-10,38,3.8,Pruned,Sunny
+C001,Cherry,Pectin,1.6,2024-01-15,Orchard C,Winter,6,6.3,Loamy,Ripening,12.8,320,40,2.5,Dark Red,2024-02-10,38,3.8,Pruned,Sunny
+C001,Cherry,Fiber,2.2,2024-01-15,Orchard C,Winter,6,6.3,Loamy,Ripening,12.8,320,40,2.5,Dark Red,2024-02-10,38,3.8,Pruned,Sunny
+K001,Kiwi,Sugars,3.0,2024-01-15,Orchard D,Winter,7,6.7,Sandy,Harvest Ready,30.5,45,680,6.8,Brown,2024-02-05,36,3.6,Pruned,Sunny
+K001,Kiwi,Malic Acid,1.1,2024-01-15,Orchard D,Winter,7,6.7,Sandy,Harvest Ready,30.5,45,680,6.8,Brown,2024-02-05,36,3.6,Pruned,Sunny
+K001,Kiwi,Vitamin C,0.8,2024-01-15,Orchard D,Winter,7,6.7,Sandy,Harvest Ready,30.5,45,680,6.8,Brown,2024-02-05,36,3.6,Pruned,Sunny
+K001,Kiwi,Chlorophyll,2.4,2024-01-15,Orchard D,Winter,7,6.7,Sandy,Harvest Ready,30.5,45,680,6.8,Brown,2024-02-05,36,3.6,Pruned,Sunny
+K001,Kiwi,Anthocyanins,3.9,2024-01-15,Orchard D,Winter,7,6.7,Sandy,Harvest Ready,30.5,45,680,6.8,Brown,2024-02-05,36,3.6,Pruned,Sunny
+K001,Kiwi,Pectin,1.4,2024-01-15,Orchard D,Winter,7,6.7,Sandy,Harvest Ready,30.5,45,680,6.8,Brown,2024-02-05,36,3.6,Pruned,Sunny
+K001,Kiwi,Fiber,2.0,2024-01-15,Orchard D,Winter,7,6.7,Sandy,Harvest Ready,30.5,45,680,6.8,Brown,2024-02-05,36,3.6,Pruned,Sunny 
