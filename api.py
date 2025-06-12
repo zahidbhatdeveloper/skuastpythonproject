@@ -313,5 +313,7 @@ async def detect_tree_disease(tree_id: str, image: UploadFile = File(...)):
         logger.error(f"Traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
 
-if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000) 
+# if __name__ == "__main__":
+#     uvicorn.run(app, host="0.0.0.0", port=8000) 
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=10000)
