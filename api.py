@@ -72,7 +72,7 @@ class ChemicalAnalysisRequest(BaseModel):
     Chlorophyll_Content: str  # Low, Normal, High
     Nitrogen_Level: str  # Low, Adequate, High
 
-<<<<<<< HEAD
+
 class TreeHealthRequest(BaseModel):
     Tree_Age: float  # Age in years
     Flower_Buds_Count: int  # Number of flowers/fruit buds
@@ -87,8 +87,8 @@ class YieldAnalysisRequest(BaseModel):
     Soil_Moisture: str  # Dry, Moderate, Wet
     Fertilizer_Used: bool  # Yes/No
 
-=======
->>>>>>> parent of e0e67ef (Add TreeHealthRequest model and analyze_tree_health endpoint to assess tree health based on age, flower buds count, leaf color, soil moisture, and fertilizer usage. Implement validation, analysis functions, and detailed recommendations for improved tree management insights.)
+
+
 @app.get("/")
 async def root():
     return {"message": "Welcome to SKUAST Tree Analysis API"}
@@ -1059,8 +1059,7 @@ async def analyze_yield(
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-=======
->>>>>>> parent of e0e67ef (Add TreeHealthRequest model and analyze_tree_health endpoint to assess tree health based on age, flower buds count, leaf color, soil moisture, and fertilizer usage. Implement validation, analysis functions, and detailed recommendations for improved tree management insights.)
+ 
 # if __name__ == "__main__":
 #     uvicorn.run(app, host="0.0.0.0", port=8000) 
 if __name__ == '__main__':
