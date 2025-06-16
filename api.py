@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, UploadFile, File, Body
+from fastapi import FastAPI, HTTPException, UploadFile, File, Body, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Dict, List, Optional
@@ -328,10 +328,11 @@ async def detect_tree_disease(tree_id: str, image: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/analyze/chemical")
-async def analyze_chemical(request: List[dict] = Body(...)):
+async def analyze_chemical(request: List[dict] = Body(...), tree_id: str = Query(None)):
     """
     Accepts a list of records (each record is a dict with all fields from the CSV),
-    performs chemical analysis, and returns the same structure as GET /tree/{tree_id}.
+    and an optional tree_id. If tree_id is provided, analyzes only that tree's data.
+    Returns the same structure as GET /tree/{tree_id}.
     """
     try:
         # Convert input to DataFrame
@@ -351,11 +352,14 @@ async def analyze_chemical(request: List[dict] = Body(...)):
             'Soil_Type': 'Soil Type',
             'Fruit_Stage': 'Fruit Stage',
         })
-        # Use the same logic as get_tree_analysis, but on this DataFrame
-        tree_id = df['Tree ID'].iloc[0]
+        # If tree_id is provided, filter for that tree
+        if tree_id is not None:
+            df = df[df['Tree ID'] == tree_id]
+            if df.empty:
+                raise HTTPException(status_code=404, detail=f"Tree ID {tree_id} not found in input data")
+        tree_id_val = df['Tree ID'].iloc[0]
         tree_species = df['Tree Species'].iloc[0]
         tree_data = df
-        # (Copy the analysis logic from get_tree_analysis, but use tree_data)
         # Calculate chemical compound statistics
         chemical_compounds = {}
         for compound in tree_data['Chemical Compound'].unique():
@@ -502,7 +506,7 @@ async def analyze_chemical(request: List[dict] = Body(...)):
                     "recommendation": "Review fruit development and harvest timing."
                 })
         return {
-            "tree_id": tree_id,
+            "tree_id": tree_id_val,
             "tree_species": tree_species,
             "chemical_compounds": chemical_compounds,
             "environmental_factors": environmental_factors,
