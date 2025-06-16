@@ -11,6 +11,7 @@ import json
 import io
 import traceback
 import logging
+from datetime import datetime
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -62,6 +63,31 @@ class DiseaseAnalysisResponse(BaseModel):
     color_analysis: Dict
     texture_analysis: Dict
     recommendations: List[Dict]
+
+# New Pydantic models for single tree data
+class ChemicalMeasurement(BaseModel):
+    chemical_compound: str
+    concentration: float
+    dosage: float
+
+class TreeData(BaseModel):
+    tree_id: str
+    tree_species: str
+    measurements: List[ChemicalMeasurement]
+    location: str
+    season: str
+    tree_age: float
+    ph_level: float
+    soil_type: str
+    fruit_stage: str
+    measurement_date: str
+
+class TreeDataResponse(BaseModel):
+    tree_id: str
+    tree_species: str
+    analysis_results: Dict
+    recommendations: List[Dict]
+    status: str
 
 @app.get("/")
 async def root():
@@ -313,7 +339,154 @@ async def detect_tree_disease(tree_id: str, image: UploadFile = File(...)):
         logger.error(f"Traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# if __name__ == "__main__":
+@app.post("/tree/data", response_model=TreeDataResponse)
+async def insert_tree_data(tree_data: TreeData):
+    """
+    Insert data for a single tree and get analysis results
+    
+    Parameters:
+    - tree_data: TreeData object containing all measurements and environmental factors
+    
+    Returns:
+    - Analysis results and recommendations for the tree
+    """
+    try:
+        # Convert the input data to a DataFrame format
+        records = []
+        for measurement in tree_data.measurements:
+            record = {
+                'Tree ID': tree_data.tree_id,
+                'Tree Species': tree_data.tree_species,
+                'Chemical Compound': measurement.chemical_compound,
+                'Concentration': measurement.concentration,
+                'Dosage': measurement.dosage,
+                'Measurement Date': tree_data.measurement_date,
+                'Location': tree_data.location,
+                'Season': tree_data.season,
+                'Tree Age (years)': tree_data.tree_age,
+                'pH Level': tree_data.ph_level,
+                'Soil Type': tree_data.soil_type,
+                'Fruit Stage': tree_data.fruit_stage
+            }
+            records.append(record)
+        
+        # Create DataFrame
+        df = pd.DataFrame(records)
+        
+        # Initialize analyzer with the new data
+        chemical_analyzer.data = df
+        
+        # Get analysis results
+        analysis_results = {}
+        recommendations = []
+        
+        # Calculate chemical compound statistics
+        for compound in df['Chemical Compound'].unique():
+            compound_data = df[df['Chemical Compound'] == compound]
+            mean_conc = compound_data['Concentration'].mean()
+            mean_dosage = compound_data['Dosage'].mean()
+            
+            # Define optimal ranges and status
+            optimal_range = "N/A"
+            status = "N/A"
+            if compound == 'Sugars':
+                optimal_range = "2.5 - 4.0"
+                status = "Optimal" if 2.5 <= mean_conc <= 4.0 else "Sub-optimal"
+            elif compound == 'Malic Acid':
+                optimal_range = "0.8 - 1.5"
+                status = "Optimal" if 0.8 <= mean_conc <= 1.5 else "Sub-optimal"
+            elif compound == 'Vitamin C':
+                optimal_range = "0.4 - 0.8"
+                status = "Optimal" if 0.4 <= mean_conc <= 0.8 else "Sub-optimal"
+            elif compound == 'Chlorophyll':
+                optimal_range = "2.0 - 3.0"
+                status = "Optimal" if 2.0 <= mean_conc <= 3.0 else "Sub-optimal"
+            elif compound == 'Anthocyanins':
+                optimal_range = "3.5 - 4.5"
+                status = "Optimal" if 3.5 <= mean_conc <= 4.5 else "Sub-optimal"
+            elif compound == 'Pectin':
+                optimal_range = "1.2 - 1.8"
+                status = "Optimal" if 1.2 <= mean_conc <= 1.8 else "Sub-optimal"
+            elif compound == 'Actinidin':
+                optimal_range = "0.8 - 1.2"
+                status = "Optimal" if 0.8 <= mean_conc <= 1.2 else "Sub-optimal"
+            elif compound == 'Fiber':
+                optimal_range = "1.8 - 2.4"
+                status = "Optimal" if 1.8 <= mean_conc <= 2.4 else "Sub-optimal"
+            
+            analysis_results[compound] = {
+                "concentration": round(mean_conc, 3),
+                "dosage": round(mean_dosage, 3),
+                "optimal_range": optimal_range,
+                "status": status
+            }
+            
+            # Generate recommendations
+            if status == "Sub-optimal":
+                if compound == 'Sugars':
+                    recommendations.append({
+                        "compound": compound,
+                        "issue": f"Sugar levels are {'low' if mean_conc < 2.5 else 'high'}",
+                        "recommendation": "Consider adjusting fertilization and irrigation."
+                    })
+                elif compound == 'Malic Acid':
+                    recommendations.append({
+                        "compound": compound,
+                        "issue": f"Malic acid levels are {'low' if mean_conc < 0.8 else 'high'}",
+                        "recommendation": "Review fruit maturity and harvest timing."
+                    })
+                # Add similar recommendations for other compounds...
+        
+        # Calculate overall health score
+        health_scores = []
+        for compound in df['Chemical Compound'].unique():
+            compound_data = df[df['Chemical Compound'] == compound]
+            mean_conc = compound_data['Concentration'].mean()
+            
+            score = 1  # Default score if not a key compound
+            if compound == 'Sugars':
+                score = 1 if 2.5 <= mean_conc <= 4.0 else 0.5
+            elif compound == 'Malic Acid':
+                score = 1 if 0.8 <= mean_conc <= 1.5 else 0.5
+            elif compound == 'Vitamin C':
+                score = 1 if 0.4 <= mean_conc <= 0.8 else 0.5
+            elif compound == 'Chlorophyll':
+                score = 1 if 2.0 <= mean_conc <= 3.0 else 0.5
+            elif compound == 'Anthocyanins':
+                score = 1 if 3.5 <= mean_conc <= 4.5 else 0.5
+            elif compound == 'Pectin':
+                score = 1 if 1.2 <= mean_conc <= 1.8 else 0.5
+            elif compound == 'Actinidin':
+                score = 1 if 0.8 <= mean_conc <= 1.2 else 0.5
+            elif compound == 'Fiber':
+                score = 1 if 1.8 <= mean_conc <= 2.4 else 0.5
+                
+            health_scores.append(score)
+        
+        overall_score = (sum(health_scores) / len(health_scores) * 100) if health_scores else 0
+        
+        analysis_results["overall_health"] = {
+            "score": round(overall_score, 1),
+            "status": "Excellent - All chemical parameters are within optimal ranges" if overall_score >= 90 else 
+                     ("Good - Most chemical parameters are within optimal ranges" if overall_score >= 75 else 
+                     ("Fair - Some chemical parameters need attention" if overall_score >= 60 else 
+                     "Poor - Multiple chemical parameters need attention"))
+        }
+        
+        return {
+            "tree_id": tree_data.tree_id,
+            "tree_species": tree_data.tree_species,
+            "analysis_results": analysis_results,
+            "recommendations": recommendations,
+            "status": "success"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error in tree data analysis: {str(e)}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+#  if __name__ == "__main__":
 #     uvicorn.run(app, host="0.0.0.0", port=8000) 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=10000)
