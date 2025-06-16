@@ -70,6 +70,13 @@ class ChemicalAnalysisRequest(BaseModel):
     Chlorophyll_Content: str  # Low, Normal, High
     Nitrogen_Level: str  # Low, Adequate, High
 
+class TreeHealthRequest(BaseModel):
+    Tree_Age: float  # Age in years
+    Flower_Buds_Count: int  # Number of flowers/fruit buds
+    Leaf_Color: str  # Green, Yellow, Brown
+    Soil_Moisture: str  # Dry, Moderate, Wet
+    Fertilizer_Used: bool  # Yes/No
+
 @app.get("/")
 async def root():
     return {"message": "Welcome to SKUAST Tree Analysis API"}
@@ -634,6 +641,366 @@ def generate_detailed_recommendations(row):
         "category": "Monitoring",
         "issue": "Regular health assessment",
         "recommendation": "Conduct regular leaf and soil analysis to monitor changes",
+        "priority": "Medium"
+    })
+    
+    return recommendations
+
+@app.post("/analyze/tree-health")
+async def analyze_tree_health(
+    request: Request,
+    tree_age: float = Form(None),
+    flower_buds_count: int = Form(None),
+    leaf_color: str = Form(None),
+    soil_moisture: str = Form(None),
+    fertilizer_used: bool = Form(None)
+):
+    """
+    Analyzes tree health based on key parameters and provides detailed predictions and recommendations.
+    """
+    try:
+        content_type = request.headers.get("content-type", "")
+        
+        if "application/x-www-form-urlencoded" in content_type:
+            # Handle form data
+            if not all([tree_age, flower_buds_count, leaf_color, soil_moisture, fertilizer_used is not None]):
+                raise HTTPException(status_code=400, detail="Missing required form fields")
+            
+            # Create a single row DataFrame
+            df = pd.DataFrame([{
+                'Tree Age': tree_age,
+                'Flower Buds Count': flower_buds_count,
+                'Leaf Color': leaf_color,
+                'Soil Moisture': soil_moisture,
+                'Fertilizer Used': fertilizer_used
+            }])
+            
+        else:
+            # Assume JSON
+            data = await request.json()
+            df = pd.DataFrame(data)
+            df = df.rename(columns={
+                'Tree_Age': 'Tree Age',
+                'Flower_Buds_Count': 'Flower Buds Count',
+                'Leaf_Color': 'Leaf Color',
+                'Soil_Moisture': 'Soil Moisture',
+                'Fertilizer_Used': 'Fertilizer Used'
+            })
+
+        # Get the first row for analysis
+        row = df.iloc[0]
+        
+        # Validate input values
+        if row['Tree Age'] < 0:
+            raise HTTPException(status_code=400, detail="Tree age cannot be negative")
+        
+        if row['Flower Buds Count'] < 0:
+            raise HTTPException(status_code=400, detail="Flower buds count cannot be negative")
+        
+        if row['Leaf Color'] not in ['Green', 'Yellow', 'Brown']:
+            raise HTTPException(status_code=400, detail="Invalid Leaf Color. Must be Green, Yellow, or Brown")
+        
+        if row['Soil Moisture'] not in ['Dry', 'Moderate', 'Wet']:
+            raise HTTPException(status_code=400, detail="Invalid Soil Moisture. Must be Dry, Moderate, or Wet")
+
+        # Analyze each parameter and generate predictions
+        analysis = {
+            "tree_maturity": analyze_tree_maturity(row['Tree Age']),
+            "flowering_potential": analyze_flowering_potential(row['Flower Buds Count'], row['Tree Age']),
+            "leaf_health": analyze_leaf_health(row['Leaf Color']),
+            "soil_condition": analyze_soil_condition(row['Soil Moisture']),
+            "nutrient_status": analyze_nutrient_status(row['Fertilizer Used']),
+            "overall_health": calculate_overall_health(row),
+            "predictions": generate_predictions(row),
+            "recommendations": generate_detailed_recommendations(row)
+        }
+
+        return analysis
+
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+def analyze_tree_maturity(tree_age):
+    """Analyze tree maturity based on age"""
+    maturity_status = "Mature"
+    issues = []
+    
+    if tree_age < 3:
+        maturity_status = "Young"
+        issues.append("Tree is too young for optimal fruit production")
+    elif tree_age > 15:
+        maturity_status = "Aging"
+        issues.append("Tree is entering senescence phase")
+    
+    return {
+        "status": maturity_status,
+        "issues": issues,
+        "details": {
+            "age": tree_age,
+            "maturity_stage": "Early Growth" if tree_age < 3 else "Prime" if 3 <= tree_age <= 15 else "Late Stage",
+            "yield_potential": "Low" if tree_age < 3 else "High" if 3 <= tree_age <= 15 else "Declining"
+        }
+    }
+
+def analyze_flowering_potential(flower_buds_count, tree_age):
+    """Analyze flowering potential based on bud count and tree age"""
+    potential = "Good"
+    issues = []
+    
+    # Expected bud count varies with tree age
+    expected_buds = 100 if tree_age < 3 else 200 if tree_age < 10 else 150
+    
+    if flower_buds_count < expected_buds * 0.5:
+        potential = "Poor"
+        issues.append("Low flower bud count indicates potential stress or nutrient deficiency")
+    elif flower_buds_count > expected_buds * 1.5:
+        potential = "Excellent"
+        issues.append("High flower bud count indicates excellent tree health")
+    
+    return {
+        "status": potential,
+        "issues": issues,
+        "details": {
+            "bud_count": flower_buds_count,
+            "expected_buds": expected_buds,
+            "flowering_efficiency": "High" if flower_buds_count > expected_buds else "Low" if flower_buds_count < expected_buds * 0.5 else "Normal"
+        }
+    }
+
+def analyze_leaf_health(leaf_color):
+    """Analyze leaf health based on color"""
+    health_status = "Good"
+    issues = []
+    
+    if leaf_color == "Yellow":
+        health_status = "Poor"
+        issues.append("Leaf yellowing indicates potential nutrient deficiency or stress")
+    elif leaf_color == "Brown":
+        health_status = "Critical"
+        issues.append("Leaf browning suggests severe stress or disease")
+    
+    return {
+        "status": health_status,
+        "issues": issues,
+        "details": {
+            "leaf_color": leaf_color,
+            "photosynthetic_efficiency": "High" if leaf_color == "Green" else "Low" if leaf_color == "Brown" else "Moderate",
+            "nutrient_status": "Optimal" if leaf_color == "Green" else "Deficient" if leaf_color == "Yellow" else "Severe Deficiency"
+        }
+    }
+
+def analyze_soil_condition(soil_moisture):
+    """Analyze soil condition based on moisture level"""
+    condition = "Good"
+    issues = []
+    
+    if soil_moisture == "Dry":
+        condition = "Poor"
+        issues.append("Dry soil may cause water stress and affect fruit development")
+    elif soil_moisture == "Wet":
+        condition = "Poor"
+        issues.append("Excessive moisture may lead to root problems and disease")
+    
+    return {
+        "status": condition,
+        "issues": issues,
+        "details": {
+            "moisture_level": soil_moisture,
+            "water_availability": "Optimal" if soil_moisture == "Moderate" else "Low" if soil_moisture == "Dry" else "Excessive",
+            "root_health_risk": "Low" if soil_moisture == "Moderate" else "High"
+        }
+    }
+
+def analyze_nutrient_status(fertilizer_used):
+    """Analyze nutrient status based on fertilizer application"""
+    status = "Good" if fertilizer_used else "Poor"
+    issues = []
+    
+    if not fertilizer_used:
+        issues.append("No fertilizer application may lead to nutrient deficiency")
+    
+    return {
+        "status": status,
+        "issues": issues,
+        "details": {
+            "fertilizer_status": "Applied" if fertilizer_used else "Not Applied",
+            "nutrient_availability": "Adequate" if fertilizer_used else "Likely Deficient",
+            "fertilization_needed": "No" if fertilizer_used else "Yes"
+        }
+    }
+
+def calculate_overall_health(row):
+    """Calculate overall tree health based on all parameters"""
+    health_scores = {
+        "maturity": 1.0,
+        "flowering": 1.0,
+        "leaf_health": 1.0,
+        "soil_condition": 1.0,
+        "nutrient_status": 1.0
+    }
+    
+    # Maturity scoring
+    if 3 <= row['Tree Age'] <= 15:
+        health_scores["maturity"] = 1.0
+    elif row['Tree Age'] < 3:
+        health_scores["maturity"] = 0.6
+    else:
+        health_scores["maturity"] = 0.8
+    
+    # Flowering scoring
+    expected_buds = 100 if row['Tree Age'] < 3 else 200 if row['Tree Age'] < 10 else 150
+    if row['Flower Buds Count'] >= expected_buds:
+        health_scores["flowering"] = 1.0
+    elif row['Flower Buds Count'] >= expected_buds * 0.5:
+        health_scores["flowering"] = 0.7
+    else:
+        health_scores["flowering"] = 0.4
+    
+    # Leaf health scoring
+    if row['Leaf Color'] == "Green":
+        health_scores["leaf_health"] = 1.0
+    elif row['Leaf Color'] == "Yellow":
+        health_scores["leaf_health"] = 0.6
+    else:  # Brown
+        health_scores["leaf_health"] = 0.3
+    
+    # Soil condition scoring
+    if row['Soil Moisture'] == "Moderate":
+        health_scores["soil_condition"] = 1.0
+    else:
+        health_scores["soil_condition"] = 0.6
+    
+    # Nutrient status scoring
+    health_scores["nutrient_status"] = 1.0 if row['Fertilizer Used'] else 0.5
+    
+    # Calculate overall score
+    overall_score = sum(health_scores.values()) / len(health_scores)
+    
+    # Determine health status
+    if overall_score >= 0.9:
+        status = "Excellent"
+    elif overall_score >= 0.7:
+        status = "Good"
+    elif overall_score >= 0.5:
+        status = "Fair"
+    else:
+        status = "Poor"
+    
+    return {
+        "overall_score": round(overall_score * 100, 1),
+        "status": status,
+        "component_scores": {
+            "maturity": round(health_scores["maturity"] * 100, 1),
+            "flowering": round(health_scores["flowering"] * 100, 1),
+            "leaf_health": round(health_scores["leaf_health"] * 100, 1),
+            "soil_condition": round(health_scores["soil_condition"] * 100, 1),
+            "nutrient_status": round(health_scores["nutrient_status"] * 100, 1)
+        }
+    }
+
+def generate_predictions(row):
+    """Generate predictions based on current conditions"""
+    predictions = {
+        "yield_potential": "High",
+        "fruit_quality": "Good",
+        "disease_risk": "Low",
+        "recovery_time": "None",
+        "next_season_potential": "High"
+    }
+    
+    # Adjust predictions based on tree age
+    if row['Tree Age'] < 3:
+        predictions["yield_potential"] = "Low"
+        predictions["next_season_potential"] = "Medium"
+    elif row['Tree Age'] > 15:
+        predictions["yield_potential"] = "Medium"
+        predictions["next_season_potential"] = "Low"
+    
+    # Adjust predictions based on flower buds
+    expected_buds = 100 if row['Tree Age'] < 3 else 200 if row['Tree Age'] < 10 else 150
+    if row['Flower Buds Count'] < expected_buds * 0.5:
+        predictions["yield_potential"] = "Low"
+        predictions["recovery_time"] = "2-3 months"
+    
+    # Adjust predictions based on leaf health
+    if row['Leaf Color'] != "Green":
+        predictions["fruit_quality"] = "Fair"
+        predictions["disease_risk"] = "High" if row['Leaf Color'] == "Brown" else "Medium"
+    
+    # Adjust predictions based on soil moisture
+    if row['Soil Moisture'] != "Moderate":
+        predictions["fruit_quality"] = "Fair"
+        predictions["disease_risk"] = "Medium"
+    
+    # Adjust predictions based on fertilizer
+    if not row['Fertilizer Used']:
+        predictions["yield_potential"] = "Low"
+        predictions["recovery_time"] = "1-2 months"
+    
+    return predictions
+
+def generate_detailed_recommendations(row):
+    """Generate detailed recommendations based on analysis"""
+    recommendations = []
+    
+    # Tree age recommendations
+    if row['Tree Age'] < 3:
+        recommendations.append({
+            "category": "Tree Management",
+            "issue": "Young tree",
+            "recommendation": "Focus on establishing strong root system and proper pruning",
+            "priority": "High"
+        })
+    elif row['Tree Age'] > 15:
+        recommendations.append({
+            "category": "Tree Management",
+            "issue": "Aging tree",
+            "recommendation": "Consider replacement or intensive care program",
+            "priority": "High"
+        })
+    
+    # Flowering recommendations
+    expected_buds = 100 if row['Tree Age'] < 3 else 200 if row['Tree Age'] < 10 else 150
+    if row['Flower Buds Count'] < expected_buds * 0.5:
+        recommendations.append({
+            "category": "Flowering",
+            "issue": "Low flower bud count",
+            "recommendation": "Review pruning practices and ensure proper winter chilling",
+            "priority": "High"
+        })
+    
+    # Leaf health recommendations
+    if row['Leaf Color'] != "Green":
+        recommendations.append({
+            "category": "Leaf Health",
+            "issue": f"Abnormal leaf color ({row['Leaf Color']})",
+            "recommendation": "Conduct leaf tissue analysis and adjust nutrient application",
+            "priority": "High" if row['Leaf Color'] == "Brown" else "Medium"
+        })
+    
+    # Soil moisture recommendations
+    if row['Soil Moisture'] != "Moderate":
+        recommendations.append({
+            "category": "Irrigation",
+            "issue": f"Inappropriate moisture level ({row['Soil Moisture']})",
+            "recommendation": "Adjust irrigation schedule to maintain optimal soil moisture",
+            "priority": "High"
+        })
+    
+    # Fertilizer recommendations
+    if not row['Fertilizer Used']:
+        recommendations.append({
+            "category": "Nutrient Management",
+            "issue": "No fertilizer application",
+            "recommendation": "Develop and implement a fertilization program",
+            "priority": "High"
+        })
+    
+    # Add general recommendations
+    recommendations.append({
+        "category": "Monitoring",
+        "issue": "Regular health assessment",
+        "recommendation": "Conduct regular tree health assessments and maintain records",
         "priority": "Medium"
     })
     
