@@ -346,10 +346,11 @@ async def detect_tree_disease(tree_id: str, image: UploadFile = File(...)):
         logger.error(f"Traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/train-model")
-def train_model():
+@app.post('/train-model')
+def train_model(file: UploadFile = File(...)):
     import pandas as pd
-    df = pd.read_csv('data/training_data.csv')
+    contents = file.file.read()
+    df = pd.read_csv(pd.io.common.BytesIO(contents))
     # Prepare features and targets
     feature_cols = ['Concentration', 'Dosage', 'Tree Age (years)', 'pH Level']
     # For simplicity, use mean of each compound per tree per measurement
