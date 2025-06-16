@@ -1,7 +1,7 @@
-from fastapi import FastAPI, HTTPException, UploadFile, File, Body, Query
+from fastapi import FastAPI, HTTPException, UploadFile, File, Body, Query, Request, Form
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 import uvicorn
 from tree_chemical_analysis import FruitTreeAnalyzer
 from tree_yield_analysis import TreeYieldAnalyzer
@@ -76,6 +76,21 @@ class ChemicalAnalysisRequest(BaseModel):
     pH_Level: float
     Soil_Type: str
     Fruit_Stage: str
+
+class TreeHealthPredictionRequest(BaseModel):
+    tree_id: str
+    chemical_compounds: Dict[str, float]
+    environmental_factors: Dict[str, float]
+    previous_dosage: Optional[float] = None
+
+class TreeHealthPredictionResponse(BaseModel):
+    tree_id: str
+    health_score: float
+    status: str
+    compound_analysis: Dict[str, Dict[str, Any]]
+    environmental_impact: Dict[str, Dict[str, Any]]
+    recommendations: List[Dict[str, str]]
+    dosage_analysis: Optional[Dict[str, Any]] = None
 
 @app.get("/")
 async def root():
@@ -328,30 +343,73 @@ async def detect_tree_disease(tree_id: str, image: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/analyze/chemical")
-async def analyze_chemical(request: List[dict] = Body(...), tree_id: str = Query(None)):
+async def analyze_chemical(request: Request, tree_id: str = Query(None), data: str = Form(None)):
     """
-    Accepts a list of records (each record is a dict with all fields from the CSV),
-    and an optional tree_id. If tree_id is provided, analyzes only that tree's data.
-    Returns the same structure as GET /tree/{tree_id}.
+    Accepts JSON, CSV, or form data (with a 'data' field containing CSV or JSON) in the POST body.
+    If CSV, parses it and analyzes the data for the tree.
+    If JSON, behaves as before.
+    If form, parses the 'data' field.
     """
     try:
-        # Convert input to DataFrame
-        df = pd.DataFrame(request)
-        # Rename columns to match code expectations
-        df = df.rename(columns={
-            'Tree_ID': 'Tree ID',
-            'Tree_Species': 'Tree Species',
-            'Chemical_Compound': 'Chemical Compound',
-            'Concentration': 'Concentration',
-            'Previous_Dosage': 'Previous Dosage',
-            'Measurement_Date': 'Measurement Date',
-            'Location': 'Location',
-            'Season': 'Season',
-            'Tree_Age_years': 'Tree Age (years)',
-            'pH_Level': 'pH Level',
-            'Soil_Type': 'Soil Type',
-            'Fruit_Stage': 'Fruit Stage',
-        })
+        content_type = request.headers.get("content-type", "")
+        df = None
+        if data is not None:
+            # Data provided via form
+            if data.strip().startswith("["):
+                # JSON array
+                import json
+                records = json.loads(data)
+                df = pd.DataFrame(records)
+                df = df.rename(columns={
+                    'Tree_ID': 'Tree ID',
+                    'Tree_Species': 'Tree Species',
+                    'Chemical_Compound': 'Chemical Compound',
+                    'Concentration': 'Concentration',
+                    'Previous_Dosage': 'Previous Dosage',
+                    'Measurement_Date': 'Measurement Date',
+                    'Location': 'Location',
+                    'Season': 'Season',
+                    'Tree_Age_years': 'Tree Age (years)',
+                    'pH_Level': 'pH Level',
+                    'Soil_Type': 'Soil Type',
+                    'Fruit_Stage': 'Fruit Stage',
+                })
+            else:
+                # Assume CSV
+                from io import StringIO
+                columns = [
+                    "Tree ID", "Tree Species", "Chemical Compound", "Concentration", "Previous Dosage",
+                    "Measurement Date", "Location", "Season", "Tree Age (years)", "pH Level", "Soil Type", "Fruit Stage"
+                ]
+                df = pd.read_csv(StringIO(data), names=columns)
+        elif "text/csv" in content_type:
+            # Read raw body as text
+            body = await request.body()
+            csv_text = body.decode("utf-8")
+            columns = [
+                "Tree ID", "Tree Species", "Chemical Compound", "Concentration", "Previous Dosage",
+                "Measurement Date", "Location", "Season", "Tree Age (years)", "pH Level", "Soil Type", "Fruit Stage"
+            ]
+            from io import StringIO
+            df = pd.read_csv(StringIO(csv_text), names=columns)
+        else:
+            # Assume JSON
+            data_json = await request.json()
+            df = pd.DataFrame(data_json)
+            df = df.rename(columns={
+                'Tree_ID': 'Tree ID',
+                'Tree_Species': 'Tree Species',
+                'Chemical_Compound': 'Chemical Compound',
+                'Concentration': 'Concentration',
+                'Previous_Dosage': 'Previous Dosage',
+                'Measurement_Date': 'Measurement Date',
+                'Location': 'Location',
+                'Season': 'Season',
+                'Tree_Age_years': 'Tree Age (years)',
+                'pH_Level': 'pH Level',
+                'Soil_Type': 'Soil Type',
+                'Fruit_Stage': 'Fruit Stage',
+            })
         # If tree_id is provided, filter for that tree
         if tree_id is not None:
             df = df[df['Tree ID'] == tree_id]
@@ -513,6 +571,22 @@ async def analyze_chemical(request: List[dict] = Body(...), tree_id: str = Query
             "overall_assessment": overall_assessment,
             "recommendations": recommendations
         }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/predict/health", response_model=TreeHealthPredictionResponse)
+async def predict_tree_health(request: TreeHealthPredictionRequest):
+    """
+    Predict tree health based on four key input fields:
+    1. tree_id: Identifier for the tree
+    2. chemical_compounds: Dictionary of chemical measurements
+    3. environmental_factors: Dictionary of environmental measurements
+    4. previous_dosage: Optional previous treatment dosage
+    """
+    try:
+        analyzer = FruitTreeAnalyzer()
+        results = analyzer.predict_tree_health(request.dict())
+        return results
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
