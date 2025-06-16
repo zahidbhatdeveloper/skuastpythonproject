@@ -6,16 +6,13 @@ The Tree Chemical Evaluation Project is a comprehensive system for analyzing and
 ## System Architecture
 
 ### Core Components
-1. **Chemical Analysis Module** (`tree_chemical_analysis.py`)
-   - Chemical compound analysis
-   - Health assessment
-   - Trend analysis
-   - Environmental impact evaluation
+1. **Chemical Analysis Module** (`chemical_analysis.py`)
+   - Provides chemical analysis for trees using 5 key parameters.
+   - Use the `/analyze/chemical` endpoint.
 
-2. **Yield Analysis Module** (`tree_yield_analysis.py`)
-   - Yield prediction
-   - Growth analysis
-   - Performance metrics
+2. **Yield Analysis Module** (`yield_analysis.py`)
+   - Provides yield analysis for trees using 5 key parameters.
+   - Use the `/analyze/yield` endpoint.
 
 3. **Disease Analysis Module** (`tree_disease_analyzer.py`)
    - Disease detection
@@ -53,8 +50,8 @@ Key dependencies include:
 ├── data/                      # Data storage directory
 ├── main.py                    # Application entry point
 ├── api.py                     # API implementation
-├── tree_chemical_analysis.py  # Chemical analysis module
-├── tree_yield_analysis.py     # Yield analysis module
+├── chemical_analysis.py       # Chemical analysis module
+├── yield_analysis.py          # Yield analysis module
 ├── tree_disease_analyzer.py   # Disease analysis module
 ├── requirements.txt           # Project dependencies
 └── README.md                  # Project overview
@@ -140,19 +137,16 @@ Analysis results are provided in:
 
 ### Chemical Analysis
 ```python
-from tree_chemical_analysis import FruitTreeAnalyzer
+from chemical_analysis import analyze_chemical_compounds
 
-analyzer = FruitTreeAnalyzer()
-analyzer.load_data('path_to_data.csv')
-analyzer.analyze_chemical_compounds(tree_id='T001')
+analyze_chemical_compounds(tree_id='T001')
 ```
 
 ### Yield Analysis
 ```python
-from tree_yield_analysis import TreeYieldAnalyzer
+from yield_analysis import analyze_yield
 
-yield_analyzer = TreeYieldAnalyzer()
-yield_analyzer.analyze_yield(tree_id='T001')
+analyze_yield(tree_id='T001')
 ```
 
 ## Best Practices

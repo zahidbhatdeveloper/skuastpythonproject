@@ -1,6 +1,26 @@
 import pandas as pd
 
+class YieldAnalysisResult:
+    def __init__(self, yield_score, rating, details, limiting_factors, recommendations):
+        self.yield_score = yield_score
+        self.rating = rating
+        self.details = details
+        self.limiting_factors = limiting_factors
+        self.recommendations = recommendations
+
+    def to_dict(self):
+        return {
+            'yield_score': self.yield_score,
+            'rating': self.rating,
+            'details': self.details,
+            'limiting_factors': self.limiting_factors,
+            'recommendations': self.recommendations
+        }
+
 class YieldAnalyzer:
+    LEAF_COLORS = ['Green', 'Yellow', 'Brown']
+    SOIL_MOISTURE = ['Dry', 'Moderate', 'Wet']
+
     def __init__(self):
         self.data = None
         self.data_dir = 'data'
@@ -50,154 +70,106 @@ class YieldAnalyzer:
         # Implementation of analyze_nutrient_status method
         pass
 
-    def analyze_yield(self, tree_age, flower_buds_count, leaf_color, soil_moisture, fertilizer_used):
-        # Input validation
+    def analyze(self, tree_age, flower_buds_count, leaf_color, soil_moisture, fertilizer_used):
         errors = []
         if not isinstance(tree_age, (int, float)) or tree_age < 0:
-            errors.append("Tree age must be a positive number.")
+            errors.append('tree_age must be a non-negative number')
         if not isinstance(flower_buds_count, int) or flower_buds_count < 0:
-            errors.append("Flower buds count must be a positive integer.")
-        if leaf_color not in ['Green', 'Yellow', 'Brown']:
-            errors.append("Leaf color must be Green, Yellow, or Brown.")
-        if soil_moisture not in ['Dry', 'Moderate', 'Wet']:
-            errors.append("Soil moisture must be Dry, Moderate, or Wet.")
+            errors.append('flower_buds_count must be a non-negative integer')
+        if leaf_color not in self.LEAF_COLORS:
+            errors.append(f'Invalid leaf_color: {leaf_color}')
+        if soil_moisture not in self.SOIL_MOISTURE:
+            errors.append(f'Invalid soil_moisture: {soil_moisture}')
         if not isinstance(fertilizer_used, bool):
-            errors.append("Fertilizer used must be true or false.")
+            errors.append('fertilizer_used must be a boolean')
         if errors:
-            return {"errors": errors}
+            return {'errors': errors}
 
-        # Yield potential calculation
-        score = 100
+        # Scoring logic
+        score = 1.0
+        details = {}
         limiting_factors = []
-        if tree_age < 3:
-            score *= 0.5
-            limiting_factors.append("Tree is too young for optimal fruit production.")
-        elif tree_age > 15:
-            score *= 0.7
-            limiting_factors.append("Tree is aging; yield may decline.")
-        expected_buds = 100 if tree_age < 3 else 200 if tree_age < 10 else 150
-        bud_ratio = flower_buds_count / expected_buds
-        if bud_ratio < 0.5:
-            score *= 0.6
-            limiting_factors.append("Low flower bud count; may indicate stress or poor nutrition.")
-        elif bud_ratio > 1.5:
-            score *= 0.9
-            limiting_factors.append("Very high bud count; may reduce fruit size.")
-        if leaf_color == "Yellow":
-            score *= 0.7
-            limiting_factors.append("Yellow leaves; possible nutrient deficiency or disease.")
-        elif leaf_color == "Brown":
-            score *= 0.4
-            limiting_factors.append("Brown leaves; severe stress or disease.")
-        if soil_moisture == "Dry":
-            score *= 0.6
-            limiting_factors.append("Dry soil; water stress may limit yield.")
-        elif soil_moisture == "Wet":
-            score *= 0.7
-            limiting_factors.append("Wet soil; risk of root problems.")
-        if not fertilizer_used:
-            score *= 0.8
-            limiting_factors.append("No fertilizer used; possible nutrient deficiency.")
-
-        # Farmer-friendly rating
-        def get_yield_rating(score):
-            if score >= 80:
-                return "Excellent"
-            elif score >= 60:
-                return "Good"
-            elif score >= 40:
-                return "Average"
-            else:
-                return "Poor"
-        rating = get_yield_rating(score)
-        if score >= 80:
-            yield_category = "High"
-        elif score >= 60:
-            yield_category = "Medium"
-        else:
-            yield_category = "Low"
-
-        # Fruit quality prediction
-        quality = "Good"
-        if leaf_color != "Green" or soil_moisture != "Moderate":
-            quality = "Fair"
-        if not fertilizer_used:
-            quality = "Poor"
-
-        # Recommendations
         recommendations = []
-        if tree_age < 3:
-            recommendations.append({
-                "category": "Tree Management",
-                "issue": "Young tree",
-                "recommendation": "Focus on root development and formative pruning for young trees.",
-                "priority": "High"
-            })
-        elif tree_age > 15:
-            recommendations.append({
-                "category": "Tree Management",
-                "issue": "Aging tree",
-                "recommendation": "Consider rejuvenation pruning or replacement for aging trees.",
-                "priority": "Medium"
-            })
-        if flower_buds_count < expected_buds * 0.5:
-            recommendations.append({
-                "category": "Flowering",
-                "issue": "Low flower bud count",
-                "recommendation": "Review pruning and winter chilling to improve bud count.",
-                "priority": "High"
-            })
-        if leaf_color != "Green":
-            recommendations.append({
-                "category": "Leaf Health",
-                "issue": f"Abnormal leaf color ({leaf_color})",
-                "recommendation": "Investigate nutrient status and check for disease.",
-                "priority": "High" if leaf_color == "Brown" else "Medium"
-            })
-        if soil_moisture != "Moderate":
-            recommendations.append({
-                "category": "Irrigation",
-                "issue": f"{soil_moisture} soil",
-                "recommendation": "Adjust irrigation to maintain moderate soil moisture.",
-                "priority": "High"
-            })
-        if not fertilizer_used:
-            recommendations.append({
-                "category": "Nutrient Management",
-                "issue": "No fertilizer used",
-                "recommendation": "Apply balanced fertilizer as per guidelines.",
-                "priority": "High"
-            })
-        recommendations.append({
-            "category": "Monitoring",
-            "issue": "Regular yield assessment",
-            "recommendation": "Conduct regular yield assessments and maintain records.",
-            "priority": "Medium"
-        })
 
-        detailed_prediction = {
-            "tree_maturity": self.analyze_tree_maturity(tree_age),
-            "flowering_potential": self.analyze_flowering_potential(flower_buds_count, tree_age),
-            "leaf_health": self.analyze_leaf_health(leaf_color),
-            "soil_condition": self.analyze_soil_condition(soil_moisture),
-            "nutrient_status": self.analyze_nutrient_status(fertilizer_used)
-        }
+        # Tree age
+        if 3 <= tree_age <= 15:
+            details['tree_age'] = {'status': 'Optimal', 'score': 1.0}
+        elif tree_age < 3:
+            details['tree_age'] = {'status': 'Young', 'score': 0.6}
+            limiting_factors.append('Tree is too young for optimal yield.')
+            recommendations.append('Focus on root development and proper pruning for young trees.')
+            score *= 0.6
+        else:
+            details['tree_age'] = {'status': 'Aging', 'score': 0.8}
+            limiting_factors.append('Tree is aging, yield may decline.')
+            recommendations.append('Consider rejuvenation pruning or replacement for old trees.')
+            score *= 0.8
 
-        return {
-            "yield_potential": {
-                "rating": rating,
-                "category": yield_category,
-                "explanation": f"Based on input factors, the yield potential is {rating}."
-            },
-            "detailed_prediction": detailed_prediction,
-            "fruit_quality_prediction": quality,
-            "limiting_factors": limiting_factors,
-            "recommendations": recommendations,
-            "input_details": {
-                "tree_age": tree_age,
-                "flower_buds_count": flower_buds_count,
-                "leaf_color": leaf_color,
-                "soil_moisture": soil_moisture,
-                "fertilizer_used": fertilizer_used
-            }
-        } #comenttttt
+        # Flower buds
+        expected_buds = 100 if tree_age < 3 else 200 if tree_age < 10 else 150
+        if flower_buds_count >= expected_buds:
+            details['flower_buds_count'] = {'status': 'Good', 'score': 1.0}
+        elif flower_buds_count >= expected_buds * 0.5:
+            details['flower_buds_count'] = {'status': 'Moderate', 'score': 0.7}
+            limiting_factors.append('Moderate flower bud count may limit yield.')
+            recommendations.append('Improve nutrition and management to increase bud count.')
+            score *= 0.7
+        else:
+            details['flower_buds_count'] = {'status': 'Low', 'score': 0.4}
+            limiting_factors.append('Low flower bud count is a major limiting factor.')
+            recommendations.append('Review pruning and ensure proper winter chilling.')
+            score *= 0.4
+
+        # Leaf color
+        if leaf_color == 'Green':
+            details['leaf_color'] = {'status': 'Healthy', 'score': 1.0}
+        elif leaf_color == 'Yellow':
+            details['leaf_color'] = {'status': 'Deficiency/Stress', 'score': 0.6}
+            limiting_factors.append('Yellow leaves indicate stress or deficiency.')
+            recommendations.append('Check for nutrient deficiency or water stress.')
+            score *= 0.6
+        else:
+            details['leaf_color'] = {'status': 'Severe Stress/Disease', 'score': 0.3}
+            limiting_factors.append('Brown leaves indicate severe stress or disease.')
+            recommendations.append('Inspect for pests, diseases, or root issues.')
+            score *= 0.3
+
+        # Soil moisture
+        if soil_moisture == 'Moderate':
+            details['soil_moisture'] = {'status': 'Optimal', 'score': 1.0}
+        else:
+            details['soil_moisture'] = {'status': 'Sub-optimal', 'score': 0.7}
+            limiting_factors.append('Soil moisture is not optimal.')
+            recommendations.append('Adjust irrigation to maintain moderate soil moisture.')
+            score *= 0.7
+
+        # Fertilizer
+        if fertilizer_used:
+            details['fertilizer_used'] = {'status': 'Applied', 'score': 1.0}
+        else:
+            details['fertilizer_used'] = {'status': 'Not Applied', 'score': 0.5}
+            limiting_factors.append('No fertilizer applied, possible nutrient deficiency.')
+            recommendations.append('Apply balanced fertilizer as per recommendations.')
+            score *= 0.5
+
+        # Final yield score and rating
+        yield_score = round(score * 100, 1)
+        if yield_score >= 90:
+            rating = 'Excellent'
+        elif yield_score >= 70:
+            rating = 'Good'
+        elif yield_score >= 50:
+            rating = 'Average'
+        else:
+            rating = 'Poor'
+
+        if not recommendations:
+            recommendations.append('Maintain current practices and monitor regularly.')
+
+        return YieldAnalysisResult(
+            yield_score=yield_score,
+            rating=rating,
+            details=details,
+            limiting_factors=limiting_factors,
+            recommendations=recommendations
+        ).to_dict()

@@ -1,6 +1,16 @@
-# Tree Chemical Evaluation Project
+# SKUAST Tree Analysis System
 
-This project provides tools for analyzing and evaluating chemical properties of trees. It allows for the analysis of various chemical compounds and properties found in different tree species.
+## Modules
+
+- `chemical_analysis.py`: Main script for chemical analysis (use `/analyze/chemical` endpoint)
+- `yield_analysis.py`: Main script for yield analysis (use `/analyze/yield` endpoint)
+
+## Usage
+
+- For chemical analysis, use the `/analyze/chemical` endpoint.
+- For yield analysis, use the `/analyze/yield` endpoint.
+
+See the code for details on input parameters and output.
 
 ## Features
 - Chemical compound analysis
@@ -15,14 +25,7 @@ This project provides tools for analyzing and evaluating chemical properties of 
 pip install -r requirements.txt
 ```
 
-## Usage
-Run the main script:
-```bash
-python tree_chemical_analysis.py
-```
-
 ## Project Structure
-- `tree_chemical_analysis.py`: Main script for chemical analysis
 - `data/`: Directory for storing tree chemical data
 - `requirements.txt`: Project dependencies
 - `README.md`: Project documentation
