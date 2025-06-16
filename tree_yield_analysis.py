@@ -38,289 +38,486 @@ class TreeYieldAnalyzer:
         except Exception as e:
             print(f"Error loading data: {str(e)}")
     
-    def analyze_yield(self, tree_id=None, tree_species=None):
-        """Analyze yield data for a specific tree or species"""
+    def analyze_yield(self, tree_age, flower_buds_count, leaf_color, soil_moisture, fertilizer_used):
+        """
+        Analyzes yield potential based on key parameters and provides detailed predictions and recommendations.
+        
+        Parameters:
+        - tree_age (float): Age of the tree in years
+        - flower_buds_count (int): Number of flowers/fruit buds
+        - leaf_color (str): Leaf color (Green, Yellow, Brown)
+        - soil_moisture (str): Soil moisture level (Dry, Moderate, Wet)
+        - fertilizer_used (bool): Whether fertilizer has been applied (True/False)
+        """
         try:
-            if self.data is None:
-                raise ValueError("No data loaded. Please load data first.")
+            # Validate input values
+            if tree_age < 0:
+                raise ValueError("Tree age cannot be negative")
             
-            # Filter data based on tree_id or tree_species
-            if tree_id:
-                tree_data = self.data[self.data['Tree ID'] == tree_id]
-            elif tree_species:
-                tree_data = self.data[self.data['Tree Species'] == tree_species]
-            else:
-                tree_data = self.data
+            if flower_buds_count < 0:
+                raise ValueError("Flower buds count cannot be negative")
             
-            if tree_data.empty:
-                raise ValueError(f"No data found for {'Tree ID: ' + tree_id if tree_id else 'Tree Species: ' + tree_species}")
+            if leaf_color not in ['Green', 'Yellow', 'Brown']:
+                raise ValueError("Invalid Leaf Color. Must be Green, Yellow, or Brown")
             
-            # Get the latest data point
-            latest_data = tree_data.sort_values('Measurement Date').iloc[-1:].reset_index(drop=True)
+            if soil_moisture not in ['Dry', 'Moderate', 'Wet']:
+                raise ValueError("Invalid Soil Moisture. Must be Dry, Moderate, or Wet")
             
-            # Calculate yield trends
-            yield_trends = tree_data.groupby('Measurement Date')['Yield (kg)'].mean().reset_index()
+            # Create a single row DataFrame for analysis
+            df = pd.DataFrame([{
+                'Tree Age': tree_age,
+                'Flower Buds Count': flower_buds_count,
+                'Leaf Color': leaf_color,
+                'Soil Moisture': soil_moisture,
+                'Fertilizer Used': fertilizer_used
+            }])
             
-            # Calculate overall statistics
-            overall_avg_yield = tree_data['Yield (kg)'].mean()
-            overall_min_yield = tree_data['Yield (kg)'].min()
-            overall_max_yield = tree_data['Yield (kg)'].max()
-            overall_std_yield = tree_data['Yield (kg)'].std()
+            # Get the first row for analysis
+            row = df.iloc[0]
             
-            # Get environmental factors
-            env_factors = {}
-            if not latest_data.empty:
-                for col in ['Tree Age (years)', 'pH Level', 'Soil Type', 'Fruit Stage', 'Irrigation (mm)', 'Fertilizer Applied (kg)']:
-                    if col in latest_data.columns and pd.notna(latest_data[col].iloc[0]):
-                        env_factors[col] = latest_data[col].iloc[0]
-            
-            # Generate recommendations
-            recommendations = self._generate_yield_recommendations(env_factors, latest_data['Yield (kg)'].iloc[0] if not latest_data.empty else None)
-            
-            # Generate HTML report
-            report_html = self.generate_yield_report(tree_data, tree_id, tree_species)
-            
-            # Save the HTML report
-            report_file_path = os.path.join(self.data_dir, f'yield_analysis_report_{tree_id if tree_id else tree_species.lower().replace(" ", "_")}.html')
-            with open(report_file_path, 'w') as f:
-                f.write(report_html)
-            
-            # Prepare the response dictionary
-            yield_analysis_results = {
-                "tree_id": tree_id,
-                "tree_species": tree_data['Tree Species'].iloc[0],
-                "report_path": os.path.abspath(report_file_path),
-                "current_yield_status": {
-                    "tree_id": latest_data['Tree ID'].iloc[0] if not latest_data.empty else None,
-                    "species": latest_data['Tree Species'].iloc[0] if not latest_data.empty else None,
-                    "current_yield_kg": float(latest_data['Yield (kg)'].iloc[0]) if not latest_data.empty else None,
-                    "fruit_count": int(latest_data['Fruit Count'].iloc[0]) if not latest_data.empty else None,
-                    "avg_fruit_weight_g": float(latest_data['Average Fruit Weight (g)'].iloc[0]) if not latest_data.empty else None,
-                    "fruit_size_cm": float(latest_data['Fruit Size (cm)'].iloc[0]) if not latest_data.empty else None,
-                    "fruit_color": latest_data['Fruit Color'].iloc[0] if not latest_data.empty else None,
-                    "harvest_date": latest_data['Harvest Date'].iloc[0] if not latest_data.empty else None
-                },
-                "overall_yield_statistics": {
-                    "average_yield_kg": float(overall_avg_yield),
-                    "minimum_yield_kg": float(overall_min_yield),
-                    "maximum_yield_kg": float(overall_max_yield),
-                    "std_dev_yield_kg": float(overall_std_yield)
-                },
-                "yield_trends": yield_trends.reset_index().rename(columns={'Measurement Date': 'date', 'Yield (kg)': 'yield_kg'}).to_dict(orient='records'),
-                "environmental_factors_impact": [
-                    {"factor": f, "value": str(v), "impact_percent": float(self._calculate_environmental_impact(f, v))}
-                    for f, v in env_factors.items()
-                ],
-                "recommendations": [
-                    {"factor": r[0], "recommendation": r[1]}
-                    for r in recommendations
-                ]
+            # Calculate yield potential based on all factors
+            yield_analysis = {
+                "yield_potential": self._calculate_yield_potential(row),
+                "fruit_quality_prediction": self._predict_fruit_quality(row),
+                "yield_limiting_factors": self._identify_limiting_factors(row),
+                "expected_yield_range": self._calculate_expected_yield_range(row),
+                "recommendations": self._generate_yield_recommendations(row)
             }
             
-            return yield_analysis_results
+            # Generate and save report
+            report_path = self._generate_yield_report(yield_analysis, row)
+            
+            return yield_analysis, report_path
             
         except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
+            print(f"Error in yield analysis: {str(e)}")
+            return None, None
     
-    def _calculate_environmental_impact(self, factor, value):
-        """Calculate the impact of environmental factors on yield"""
-        try:
-            if pd.isna(value):
-                return 0.0
-            
-            # Define optimal ranges for different factors
-            optimal_ranges = {
-                'Tree Age (years)': (3, 10),
-                'pH Level': (6.0, 7.0),
-                'Irrigation (mm)': (30, 40),
-                'Fertilizer Applied (kg)': (3.0, 4.0)
+    def _calculate_yield_potential(self, row):
+        """Calculate overall yield potential based on all factors"""
+        # Base yield potential score (0-100)
+        base_score = 100
+        
+        # Adjust for tree age
+        if row['Tree Age'] < 3:
+            base_score *= 0.5  # Young trees have lower yield potential
+        elif row['Tree Age'] > 15:
+            base_score *= 0.7  # Aging trees have reduced yield potential
+        
+        # Adjust for flower buds
+        expected_buds = 100 if row['Tree Age'] < 3 else 200 if row['Tree Age'] < 10 else 150
+        bud_ratio = row['Flower Buds Count'] / expected_buds
+        if bud_ratio < 0.5:
+            base_score *= 0.6
+        elif bud_ratio > 1.5:
+            base_score *= 0.9  # Too many buds can reduce fruit size
+        
+        # Adjust for leaf health
+        if row['Leaf Color'] == "Yellow":
+            base_score *= 0.7
+        elif row['Leaf Color'] == "Brown":
+            base_score *= 0.4
+        
+        # Adjust for soil moisture
+        if row['Soil Moisture'] == "Dry":
+            base_score *= 0.6
+        elif row['Soil Moisture'] == "Wet":
+            base_score *= 0.7
+        
+        # Adjust for fertilizer
+        if not row['Fertilizer Used']:
+            base_score *= 0.8
+        
+        # Calculate final score
+        final_score = round(base_score, 1)
+        
+        # Determine yield potential category
+        if final_score >= 80:
+            potential = "High"
+        elif final_score >= 60:
+            potential = "Medium"
+        else:
+            potential = "Low"
+        
+        return {
+            "score": final_score,
+            "category": potential,
+            "details": {
+                "tree_age_factor": "Optimal" if 3 <= row['Tree Age'] <= 15 else "Sub-optimal",
+                "flowering_factor": "Optimal" if 0.5 <= bud_ratio <= 1.5 else "Sub-optimal",
+                "leaf_health_factor": "Optimal" if row['Leaf Color'] == "Green" else "Sub-optimal",
+                "soil_factor": "Optimal" if row['Soil Moisture'] == "Moderate" else "Sub-optimal",
+                "nutrient_factor": "Optimal" if row['Fertilizer Used'] else "Sub-optimal"
             }
-            
-            if factor in optimal_ranges:
-                min_val, max_val = optimal_ranges[factor]
-                if min_val <= float(value) <= max_val:
-                    return 100.0
-                else:
-                    # Calculate deviation from optimal range
-                    deviation = min(abs(float(value) - min_val), abs(float(value) - max_val))
-                    return max(0.0, 100.0 - (deviation * 20.0))  # 20% penalty per unit deviation
-            
-            return 50.0  # Default impact for other factors
-            
-        except Exception as e:
-            print(f"Error calculating environmental impact: {str(e)}")
-            return 0.0
-
-    def _generate_yield_recommendations(self, env_factors, current_yield):
-        """Generate recommendations based on environmental factors and current yield"""
+        }
+    
+    def _predict_fruit_quality(self, row):
+        """Predict fruit quality based on input parameters"""
+        quality_factors = {
+            "size": "Medium",
+            "color": "Good",
+            "sweetness": "Medium",
+            "firmness": "Good",
+            "overall_quality": "Good"
+        }
+        
+        # Adjust for tree age
+        if row['Tree Age'] < 3:
+            quality_factors["size"] = "Small"
+            quality_factors["overall_quality"] = "Fair"
+        elif row['Tree Age'] > 15:
+            quality_factors["firmness"] = "Medium"
+        
+        # Adjust for leaf health
+        if row['Leaf Color'] != "Green":
+            quality_factors["color"] = "Poor"
+            quality_factors["sweetness"] = "Low"
+            quality_factors["overall_quality"] = "Fair"
+        
+        # Adjust for soil moisture
+        if row['Soil Moisture'] == "Dry":
+            quality_factors["size"] = "Small"
+            quality_factors["sweetness"] = "High"
+        elif row['Soil Moisture'] == "Wet":
+            quality_factors["firmness"] = "Poor"
+        
+        # Adjust for fertilizer
+        if not row['Fertilizer Used']:
+            quality_factors["size"] = "Small"
+            quality_factors["sweetness"] = "Low"
+        
+        return quality_factors
+    
+    def _identify_limiting_factors(self, row):
+        """Identify factors limiting yield potential"""
+        limiting_factors = []
+        
+        # Tree age factors
+        if row['Tree Age'] < 3:
+            limiting_factors.append({
+                "factor": "Tree Age",
+                "issue": "Young tree",
+                "impact": "High",
+                "description": "Tree is too young for optimal fruit production"
+            })
+        elif row['Tree Age'] > 15:
+            limiting_factors.append({
+                "factor": "Tree Age",
+                "issue": "Aging tree",
+                "impact": "Medium",
+                "description": "Tree is entering senescence phase"
+            })
+        
+        # Flowering factors
+        expected_buds = 100 if row['Tree Age'] < 3 else 200 if row['Tree Age'] < 10 else 150
+        if row['Flower Buds Count'] < expected_buds * 0.5:
+            limiting_factors.append({
+                "factor": "Flowering",
+                "issue": "Low flower bud count",
+                "impact": "High",
+                "description": "Insufficient flowers for optimal yield"
+            })
+        
+        # Leaf health factors
+        if row['Leaf Color'] != "Green":
+            limiting_factors.append({
+                "factor": "Leaf Health",
+                "issue": f"Abnormal leaf color ({row['Leaf Color']})",
+                "impact": "High" if row['Leaf Color'] == "Brown" else "Medium",
+                "description": "Poor leaf health affects photosynthesis and fruit development"
+            })
+        
+        # Soil moisture factors
+        if row['Soil Moisture'] != "Moderate":
+            limiting_factors.append({
+                "factor": "Soil Moisture",
+                "issue": f"Inappropriate moisture level ({row['Soil Moisture']})",
+                "impact": "High",
+                "description": "Sub-optimal moisture affects fruit development and quality"
+            })
+        
+        # Nutrient factors
+        if not row['Fertilizer Used']:
+            limiting_factors.append({
+                "factor": "Nutrients",
+                "issue": "No fertilizer application",
+                "impact": "High",
+                "description": "Lack of nutrients affects fruit development and yield"
+            })
+        
+        return limiting_factors
+    
+    def _calculate_expected_yield_range(self, row):
+        """Calculate expected yield range based on input parameters"""
+        # Base yield range (kg per tree)
+        base_yield = {
+            "minimum": 15,
+            "maximum": 30,
+            "expected": 22.5
+        }
+        
+        # Adjust for tree age
+        if row['Tree Age'] < 3:
+            base_yield["minimum"] *= 0.5
+            base_yield["maximum"] *= 0.5
+            base_yield["expected"] *= 0.5
+        elif row['Tree Age'] > 15:
+            base_yield["minimum"] *= 0.7
+            base_yield["maximum"] *= 0.7
+            base_yield["expected"] *= 0.7
+        
+        # Adjust for flower buds
+        expected_buds = 100 if row['Tree Age'] < 3 else 200 if row['Tree Age'] < 10 else 150
+        bud_ratio = row['Flower Buds Count'] / expected_buds
+        if bud_ratio < 0.5:
+            base_yield["minimum"] *= 0.6
+            base_yield["maximum"] *= 0.6
+            base_yield["expected"] *= 0.6
+        
+        # Adjust for leaf health
+        if row['Leaf Color'] == "Yellow":
+            base_yield["minimum"] *= 0.7
+            base_yield["maximum"] *= 0.7
+            base_yield["expected"] *= 0.7
+        elif row['Leaf Color'] == "Brown":
+            base_yield["minimum"] *= 0.4
+            base_yield["maximum"] *= 0.4
+            base_yield["expected"] *= 0.4
+        
+        # Adjust for soil moisture
+        if row['Soil Moisture'] != "Moderate":
+            base_yield["minimum"] *= 0.7
+            base_yield["maximum"] *= 0.7
+            base_yield["expected"] *= 0.7
+        
+        # Adjust for fertilizer
+        if not row['Fertilizer Used']:
+            base_yield["minimum"] *= 0.8
+            base_yield["maximum"] *= 0.8
+            base_yield["expected"] *= 0.8
+        
+        # Round all values
+        return {
+            "minimum": round(base_yield["minimum"], 1),
+            "maximum": round(base_yield["maximum"], 1),
+            "expected": round(base_yield["expected"], 1),
+            "unit": "kg per tree"
+        }
+    
+    def _generate_yield_recommendations(self, row):
+        """Generate recommendations to improve yield"""
         recommendations = []
         
-        try:
-            # Check tree age
-            if 'Tree Age (years)' in env_factors:
-                age = float(env_factors['Tree Age (years)'])
-                if age < 3:
-                    recommendations.append(("Tree Age", "Tree is too young for optimal yield. Consider waiting for maturity."))
-                elif age > 10:
-                    recommendations.append(("Tree Age", "Tree is aging. Consider replacement or intensive care."))
-            
-            # Check pH level
-            if 'pH Level' in env_factors:
-                ph = float(env_factors['pH Level'])
-                if ph < 6.0:
-                    recommendations.append(("pH Level", "Soil is too acidic. Consider adding lime to raise pH."))
-                elif ph > 7.0:
-                    recommendations.append(("pH Level", "Soil is too alkaline. Consider adding sulfur to lower pH."))
-            
-            # Check irrigation
-            if 'Irrigation (mm)' in env_factors:
-                irrigation = float(env_factors['Irrigation (mm)'])
-                if irrigation < 30:
-                    recommendations.append(("Irrigation", "Increase irrigation to optimal levels (30-40mm)."))
-                elif irrigation > 40:
-                    recommendations.append(("Irrigation", "Reduce irrigation to prevent waterlogging."))
-            
-            # Check fertilizer
-            if 'Fertilizer Applied (kg)' in env_factors:
-                fertilizer = float(env_factors['Fertilizer Applied (kg)'])
-                if fertilizer < 3.0:
-                    recommendations.append(("Fertilizer", "Increase fertilizer application to optimal levels (3-4kg)."))
-                elif fertilizer > 4.0:
-                    recommendations.append(("Fertilizer", "Reduce fertilizer application to prevent nutrient burn."))
-            
-            # Add yield-specific recommendations
-            if current_yield is not None:
-                if current_yield < 20:
-                    recommendations.append(("Yield", "Current yield is below optimal. Review all environmental factors."))
-                elif current_yield > 30:
-                    recommendations.append(("Yield", "Excellent yield! Maintain current practices."))
-            
-        except Exception as e:
-            print(f"Error generating recommendations: {str(e)}")
+        # Tree age recommendations
+        if row['Tree Age'] < 3:
+            recommendations.append({
+                "category": "Tree Management",
+                "issue": "Young tree",
+                "recommendation": "Focus on establishing strong root system and proper pruning",
+                "priority": "High",
+                "expected_impact": "Long-term yield improvement"
+            })
+        elif row['Tree Age'] > 15:
+            recommendations.append({
+                "category": "Tree Management",
+                "issue": "Aging tree",
+                "recommendation": "Consider replacement or intensive care program",
+                "priority": "High",
+                "expected_impact": "Yield stabilization"
+            })
+        
+        # Flowering recommendations
+        expected_buds = 100 if row['Tree Age'] < 3 else 200 if row['Tree Age'] < 10 else 150
+        if row['Flower Buds Count'] < expected_buds * 0.5:
+            recommendations.append({
+                "category": "Flowering",
+                "issue": "Low flower bud count",
+                "recommendation": "Review pruning practices and ensure proper winter chilling",
+                "priority": "High",
+                "expected_impact": "Immediate yield improvement"
+            })
+        
+        # Leaf health recommendations
+        if row['Leaf Color'] != "Green":
+            recommendations.append({
+                "category": "Leaf Health",
+                "issue": f"Abnormal leaf color ({row['Leaf Color']})",
+                "recommendation": "Conduct leaf tissue analysis and adjust nutrient application",
+                "priority": "High" if row['Leaf Color'] == "Brown" else "Medium",
+                "expected_impact": "Medium-term yield improvement"
+            })
+        
+        # Soil moisture recommendations
+        if row['Soil Moisture'] != "Moderate":
+            recommendations.append({
+                "category": "Irrigation",
+                "issue": f"Inappropriate moisture level ({row['Soil Moisture']})",
+                "recommendation": "Adjust irrigation schedule to maintain optimal soil moisture",
+                "priority": "High",
+                "expected_impact": "Immediate yield improvement"
+            })
+        
+        # Fertilizer recommendations
+        if not row['Fertilizer Used']:
+            recommendations.append({
+                "category": "Nutrient Management",
+                "issue": "No fertilizer application",
+                "recommendation": "Develop and implement a fertilization program",
+                "priority": "High",
+                "expected_impact": "Medium-term yield improvement"
+            })
+        
+        # Add general recommendations
+        recommendations.append({
+            "category": "Monitoring",
+            "issue": "Regular yield assessment",
+            "recommendation": "Conduct regular yield assessments and maintain records",
+            "priority": "Medium",
+            "expected_impact": "Long-term yield optimization"
+        })
         
         return recommendations
-
-    def generate_yield_report(self, tree_data, tree_id=None, tree_species=None):
-        """Generate an HTML report for yield analysis"""
-        try:
-            # Get the latest data point
-            latest_data = tree_data.sort_values('Measurement Date').iloc[-1:].reset_index(drop=True)
-            
-            # Calculate statistics
-            avg_yield = tree_data['Yield (kg)'].mean()
-            max_yield = tree_data['Yield (kg)'].max()
-            min_yield = tree_data['Yield (kg)'].min()
-            
-            # Generate HTML report
-            html = f"""
-            <html>
-            <head>
-                <title>Yield Analysis Report</title>
-                <style>
-                    body {{ font-family: Arial, sans-serif; margin: 20px; }}
-                    .container {{ max-width: 800px; margin: 0 auto; }}
-                    .header {{ background-color: #f0f0f0; padding: 20px; border-radius: 5px; }}
-                    .section {{ margin: 20px 0; padding: 20px; border: 1px solid #ddd; border-radius: 5px; }}
-                    table {{ width: 100%; border-collapse: collapse; }}
-                    th, td {{ padding: 8px; text-align: left; border-bottom: 1px solid #ddd; }}
-                    th {{ background-color: #f0f0f0; }}
-                </style>
-            </head>
-            <body>
-                <div class="container">
-                    <div class="header">
-                        <h1>Yield Analysis Report</h1>
-                        <p>Tree ID: {tree_id if tree_id else 'N/A'}</p>
-                        <p>Species: {tree_species if tree_species else tree_data['Tree Species'].iloc[0]}</p>
-                        <p>Report Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
-                    </div>
-                    
-                    <div class="section">
-                        <h2>Current Yield Status</h2>
-                        <table>
-                            <tr><th>Metric</th><th>Value</th></tr>
-                            <tr><td>Current Yield</td><td>{latest_data['Yield (kg)'].iloc[0]:.2f} kg</td></tr>
-                            <tr><td>Fruit Count</td><td>{latest_data['Fruit Count'].iloc[0]}</td></tr>
-                            <tr><td>Average Fruit Weight</td><td>{latest_data['Average Fruit Weight (g)'].iloc[0]:.2f} g</td></tr>
-                            <tr><td>Fruit Size</td><td>{latest_data['Fruit Size (cm)'].iloc[0]:.2f} cm</td></tr>
-                            <tr><td>Fruit Color</td><td>{latest_data['Fruit Color'].iloc[0]}</td></tr>
-                            <tr><td>Harvest Date</td><td>{latest_data['Harvest Date'].iloc[0]}</td></tr>
-                        </table>
-                    </div>
-                    
-                    <div class="section">
-                        <h2>Overall Yield Statistics</h2>
-                        <table>
-                            <tr><th>Metric</th><th>Value</th></tr>
-                            <tr><td>Average Yield</td><td>{avg_yield:.2f} kg</td></tr>
-                            <tr><td>Maximum Yield</td><td>{max_yield:.2f} kg</td></tr>
-                            <tr><td>Minimum Yield</td><td>{min_yield:.2f} kg</td></tr>
-                        </table>
-                    </div>
-                    
-                    <div class="section">
-                        <h2>Environmental Factors</h2>
-                        <table>
-                            <tr><th>Factor</th><th>Value</th></tr>
-                            <tr><td>Tree Age</td><td>{latest_data['Tree Age (years)'].iloc[0]} years</td></tr>
-                            <tr><td>pH Level</td><td>{latest_data['pH Level'].iloc[0]}</td></tr>
-                            <tr><td>Soil Type</td><td>{latest_data['Soil Type'].iloc[0]}</td></tr>
-                            <tr><td>Irrigation</td><td>{latest_data['Irrigation (mm)'].iloc[0]} mm</td></tr>
-                            <tr><td>Fertilizer</td><td>{latest_data['Fertilizer Applied (kg)'].iloc[0]} kg</td></tr>
-                        </table>
-                    </div>
-                </div>
-            </body>
-            </html>
-            """
-            
-            return html
-            
-        except Exception as e:
-            print(f"Error generating yield report: {str(e)}")
-            return "<html><body><h1>Error generating report</h1></body></html>"
+    
+    def _generate_yield_report(self, yield_analysis, row):
+        """Generate a detailed HTML report for the yield analysis"""
+        report_html = f"""
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Tree Yield Analysis Report</title>
+    <style>
+        body {{ font-family: Arial, sans-serif; margin: 20px; line-height: 1.6; }}
+        h1, h2, h3 {{ color: #2c3e50; }}
+        .section {{ margin-bottom: 30px; padding: 20px; border: 1px solid #ddd; border-radius: 5px; }}
+        .score {{ font-size: 24px; font-weight: bold; color: #27ae60; }}
+        .warning {{ color: #e74c3c; }}
+        .recommendation {{ background-color: #f8f9fa; padding: 10px; margin: 5px 0; border-left: 4px solid #3498db; }}
+        .high-priority {{ border-left-color: #e74c3c; }}
+        .medium-priority {{ border-left-color: #f1c40f; }}
+        .low-priority {{ border-left-color: #2ecc71; }}
+    </style>
+</head>
+<body>
+    <h1>Tree Yield Analysis Report</h1>
+    
+    <div class="section">
+        <h2>Input Parameters</h2>
+        <p>Tree Age: {row['Tree Age']} years</p>
+        <p>Flower Buds Count: {row['Flower Buds Count']}</p>
+        <p>Leaf Color: {row['Leaf Color']}</p>
+        <p>Soil Moisture: {row['Soil Moisture']}</p>
+        <p>Fertilizer Used: {'Yes' if row['Fertilizer Used'] else 'No'}</p>
+    </div>
+    
+    <div class="section">
+        <h2>Yield Potential</h2>
+        <p class="score">Score: {yield_analysis['yield_potential']['score']}%</p>
+        <p>Category: {yield_analysis['yield_potential']['category']}</p>
+        <h3>Factor Analysis:</h3>
+        <ul>
+            <li>Tree Age: {yield_analysis['yield_potential']['details']['tree_age_factor']}</li>
+            <li>Flowering: {yield_analysis['yield_potential']['details']['flowering_factor']}</li>
+            <li>Leaf Health: {yield_analysis['yield_potential']['details']['leaf_health_factor']}</li>
+            <li>Soil Condition: {yield_analysis['yield_potential']['details']['soil_factor']}</li>
+            <li>Nutrient Status: {yield_analysis['yield_potential']['details']['nutrient_factor']}</li>
+        </ul>
+    </div>
+    
+    <div class="section">
+        <h2>Fruit Quality Prediction</h2>
+        <ul>
+            <li>Size: {yield_analysis['fruit_quality_prediction']['size']}</li>
+            <li>Color: {yield_analysis['fruit_quality_prediction']['color']}</li>
+            <li>Sweetness: {yield_analysis['fruit_quality_prediction']['sweetness']}</li>
+            <li>Firmness: {yield_analysis['fruit_quality_prediction']['firmness']}</li>
+            <li>Overall Quality: {yield_analysis['fruit_quality_prediction']['overall_quality']}</li>
+        </ul>
+    </div>
+    
+    <div class="section">
+        <h2>Expected Yield Range</h2>
+        <p>Minimum: {yield_analysis['expected_yield_range']['minimum']} {yield_analysis['expected_yield_range']['unit']}</p>
+        <p>Maximum: {yield_analysis['expected_yield_range']['maximum']} {yield_analysis['expected_yield_range']['unit']}</p>
+        <p>Expected: {yield_analysis['expected_yield_range']['expected']} {yield_analysis['expected_yield_range']['unit']}</p>
+    </div>
+    
+    <div class="section">
+        <h2>Limiting Factors</h2>
+        <ul>
+            {''.join(f"<li><strong>{factor['factor']}:</strong> {factor['issue']} - {factor['description']}</li>" for factor in yield_analysis['yield_limiting_factors'])}
+        </ul>
+    </div>
+    
+    <div class="section">
+        <h2>Recommendations</h2>
+        {''.join(f"""
+        <div class="recommendation {'high-priority' if rec['priority'] == 'High' else 'medium-priority' if rec['priority'] == 'Medium' else 'low-priority'}">
+            <h3>{rec['category']} - {rec['issue']}</h3>
+            <p><strong>Recommendation:</strong> {rec['recommendation']}</p>
+            <p><strong>Priority:</strong> {rec['priority']}</p>
+            <p><strong>Expected Impact:</strong> {rec['expected_impact']}</p>
+        </div>
+        """ for rec in yield_analysis['recommendations'])}
+    </div>
+</body>
+</html>
+"""
+        
+        # Save the report
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        report_path = os.path.join(self.data_dir, f'yield_analysis_report_{timestamp}.html')
+        with open(report_path, 'w') as f:
+            f.write(report_html)
+        
+        return report_path
 
 def main():
+    print("SKUAST Tree Yield Analysis System")
+    print("--------------------------------")
+    
     analyzer = TreeYieldAnalyzer()
     
-    print("SKUAST Fruit Tree Yield Analysis System")
-    print("--------------------------------------")
-    
     while True:
-        print("\nMain Menu:")
-        print("1. Load yield dataset")
+        print("\nYield Analysis Menu:")
+        print("1. Analyze Tree Yield")
         print("2. Exit")
         
         choice = input("\nEnter your choice (1-2): ")
         
         if choice == '1':
-            file_path = input("Enter the path to the yield analysis data file: ")
-            analyzer.load_data(file_path)
-            if analyzer.data is not None:
-                while True:
-                    print("\nAvailable Tree IDs:")
-                    for species in analyzer.data['Tree Species'].unique():
-                        tree_ids = analyzer.data[analyzer.data['Tree Species'] == species]['Tree ID'].unique()
-                        print(f"{species}: {', '.join(tree_ids)}")
-
-                    tree_id_input = input("\nEnter Tree ID to analyze yield (or type 'menu' to return to main menu, 'exit' to quit): ").strip().upper()
+            try:
+                # Get input parameters
+                tree_age = float(input("Enter tree age (years): "))
+                flower_buds_count = int(input("Enter number of flower buds: "))
+                leaf_color = input("Enter leaf color (Green/Yellow/Brown): ").strip().capitalize()
+                soil_moisture = input("Enter soil moisture (Dry/Moderate/Wet): ").strip().capitalize()
+                fertilizer_used = input("Has fertilizer been used? (Yes/No): ").strip().lower() == 'yes'
+                
+                # Perform analysis
+                yield_analysis, report_path = analyzer.analyze_yield(
+                    tree_age, flower_buds_count, leaf_color, soil_moisture, fertilizer_used
+                )
+                
+                if yield_analysis and report_path:
+                    print(f"\nAnalysis complete! Report saved to: {report_path}")
                     
-                    if tree_id_input == 'MENU':
-                        break
-                    elif tree_id_input == 'EXIT':
-                        print("Thank you for using the SKUAST Fruit Tree Yield Analysis System!")
-                        return
+                    # Print summary
+                    print("\nYield Analysis Summary:")
+                    print(f"Yield Potential: {yield_analysis['yield_potential']['category']} ({yield_analysis['yield_potential']['score']}%)")
+                    print(f"Expected Yield: {yield_analysis['expected_yield_range']['expected']} {yield_analysis['expected_yield_range']['unit']}")
+                    print(f"Overall Fruit Quality: {yield_analysis['fruit_quality_prediction']['overall_quality']}")
                     
-                    if tree_id_input in analyzer.data['Tree ID'].unique():
-                        print(f"\nAnalyzing yield for Tree {tree_id_input}...")
-                        yield_analysis_results = analyzer.analyze_yield(tree_id=tree_id_input)
-                        print("\nYield Analysis Results:")
-                        print(tabulate(yield_analysis_results.items(), headers=["Key", "Value"]))
-                    else:
-                        print(f"Invalid Tree ID '{tree_id_input}'. Please use one of the available IDs shown above.")
+                    # Open the report in the default web browser
+                    import webbrowser
+                    webbrowser.open(f'file://{os.path.abspath(report_path)}')
+                
+            except ValueError as e:
+                print(f"Error: {str(e)}")
+            except Exception as e:
+                print(f"An error occurred: {str(e)}")
         
         elif choice == '2':
-            print("Thank you for using the SKUAST Fruit Tree Yield Analysis System!")
+            print("Thank you for using the SKUAST Tree Yield Analysis System!")
             break
         
         else:

@@ -77,6 +77,13 @@ class TreeHealthRequest(BaseModel):
     Soil_Moisture: str  # Dry, Moderate, Wet
     Fertilizer_Used: bool  # Yes/No
 
+class YieldAnalysisRequest(BaseModel):
+    Tree_Age: float  # Age in years
+    Flower_Buds_Count: int  # Number of flowers/fruit buds
+    Leaf_Color: str  # Green, Yellow, Brown
+    Soil_Moisture: str  # Dry, Moderate, Wet
+    Fertilizer_Used: bool  # Yes/No
+
 @app.get("/")
 async def root():
     return {"message": "Welcome to SKUAST Tree Analysis API"}
@@ -1002,6 +1009,362 @@ def generate_detailed_recommendations(row):
         "issue": "Regular health assessment",
         "recommendation": "Conduct regular tree health assessments and maintain records",
         "priority": "Medium"
+    })
+    
+    return recommendations
+
+@app.post("/analyze/yield")
+async def analyze_yield(
+    request: Request,
+    tree_age: float = Form(None),
+    flower_buds_count: int = Form(None),
+    leaf_color: str = Form(None),
+    soil_moisture: str = Form(None),
+    fertilizer_used: bool = Form(None)
+):
+    """
+    Analyzes yield potential based on key parameters and provides detailed predictions and recommendations.
+    """
+    try:
+        content_type = request.headers.get("content-type", "")
+        
+        if "application/x-www-form-urlencoded" in content_type:
+            # Handle form data
+            if not all([tree_age, flower_buds_count, leaf_color, soil_moisture, fertilizer_used is not None]):
+                raise HTTPException(status_code=400, detail="Missing required form fields")
+            
+            # Create a single row DataFrame
+            df = pd.DataFrame([{
+                'Tree Age': tree_age,
+                'Flower Buds Count': flower_buds_count,
+                'Leaf Color': leaf_color,
+                'Soil Moisture': soil_moisture,
+                'Fertilizer Used': fertilizer_used
+            }])
+            
+        else:
+            # Assume JSON
+            data = await request.json()
+            df = pd.DataFrame(data)
+            df = df.rename(columns={
+                'Tree_Age': 'Tree Age',
+                'Flower_Buds_Count': 'Flower Buds Count',
+                'Leaf_Color': 'Leaf Color',
+                'Soil_Moisture': 'Soil Moisture',
+                'Fertilizer_Used': 'Fertilizer Used'
+            })
+
+        # Get the first row for analysis
+        row = df.iloc[0]
+        
+        # Validate input values
+        if row['Tree Age'] < 0:
+            raise HTTPException(status_code=400, detail="Tree age cannot be negative")
+        
+        if row['Flower Buds Count'] < 0:
+            raise HTTPException(status_code=400, detail="Flower buds count cannot be negative")
+        
+        if row['Leaf Color'] not in ['Green', 'Yellow', 'Brown']:
+            raise HTTPException(status_code=400, detail="Invalid Leaf Color. Must be Green, Yellow, or Brown")
+        
+        if row['Soil Moisture'] not in ['Dry', 'Moderate', 'Wet']:
+            raise HTTPException(status_code=400, detail="Invalid Soil Moisture. Must be Dry, Moderate, or Wet")
+
+        # Calculate yield potential based on all factors
+        yield_analysis = {
+            "yield_potential": calculate_yield_potential(row),
+            "fruit_quality_prediction": predict_fruit_quality(row),
+            "yield_limiting_factors": identify_limiting_factors(row),
+            "expected_yield_range": calculate_expected_yield_range(row),
+            "recommendations": generate_yield_recommendations(row)
+        }
+
+        return yield_analysis
+
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+def calculate_yield_potential(row):
+    """Calculate overall yield potential based on all factors"""
+    # Base yield potential score (0-100)
+    base_score = 100
+    
+    # Adjust for tree age
+    if row['Tree Age'] < 3:
+        base_score *= 0.5  # Young trees have lower yield potential
+    elif row['Tree Age'] > 15:
+        base_score *= 0.7  # Aging trees have reduced yield potential
+    
+    # Adjust for flower buds
+    expected_buds = 100 if row['Tree Age'] < 3 else 200 if row['Tree Age'] < 10 else 150
+    bud_ratio = row['Flower Buds Count'] / expected_buds
+    if bud_ratio < 0.5:
+        base_score *= 0.6
+    elif bud_ratio > 1.5:
+        base_score *= 0.9  # Too many buds can reduce fruit size
+    
+    # Adjust for leaf health
+    if row['Leaf Color'] == "Yellow":
+        base_score *= 0.7
+    elif row['Leaf Color'] == "Brown":
+        base_score *= 0.4
+    
+    # Adjust for soil moisture
+    if row['Soil Moisture'] == "Dry":
+        base_score *= 0.6
+    elif row['Soil Moisture'] == "Wet":
+        base_score *= 0.7
+    
+    # Adjust for fertilizer
+    if not row['Fertilizer Used']:
+        base_score *= 0.8
+    
+    # Calculate final score
+    final_score = round(base_score, 1)
+    
+    # Determine yield potential category
+    if final_score >= 80:
+        potential = "High"
+    elif final_score >= 60:
+        potential = "Medium"
+    else:
+        potential = "Low"
+    
+    return {
+        "score": final_score,
+        "category": potential,
+        "details": {
+            "tree_age_factor": "Optimal" if 3 <= row['Tree Age'] <= 15 else "Sub-optimal",
+            "flowering_factor": "Optimal" if 0.5 <= bud_ratio <= 1.5 else "Sub-optimal",
+            "leaf_health_factor": "Optimal" if row['Leaf Color'] == "Green" else "Sub-optimal",
+            "soil_factor": "Optimal" if row['Soil Moisture'] == "Moderate" else "Sub-optimal",
+            "nutrient_factor": "Optimal" if row['Fertilizer Used'] else "Sub-optimal"
+        }
+    }
+
+def predict_fruit_quality(row):
+    """Predict fruit quality based on input parameters"""
+    quality_factors = {
+        "size": "Medium",
+        "color": "Good",
+        "sweetness": "Medium",
+        "firmness": "Good",
+        "overall_quality": "Good"
+    }
+    
+    # Adjust for tree age
+    if row['Tree Age'] < 3:
+        quality_factors["size"] = "Small"
+        quality_factors["overall_quality"] = "Fair"
+    elif row['Tree Age'] > 15:
+        quality_factors["firmness"] = "Medium"
+    
+    # Adjust for leaf health
+    if row['Leaf Color'] != "Green":
+        quality_factors["color"] = "Poor"
+        quality_factors["sweetness"] = "Low"
+        quality_factors["overall_quality"] = "Fair"
+    
+    # Adjust for soil moisture
+    if row['Soil Moisture'] == "Dry":
+        quality_factors["size"] = "Small"
+        quality_factors["sweetness"] = "High"
+    elif row['Soil Moisture'] == "Wet":
+        quality_factors["firmness"] = "Poor"
+    
+    # Adjust for fertilizer
+    if not row['Fertilizer Used']:
+        quality_factors["size"] = "Small"
+        quality_factors["sweetness"] = "Low"
+    
+    return quality_factors
+
+def identify_limiting_factors(row):
+    """Identify factors limiting yield potential"""
+    limiting_factors = []
+    
+    # Tree age factors
+    if row['Tree Age'] < 3:
+        limiting_factors.append({
+            "factor": "Tree Age",
+            "issue": "Young tree",
+            "impact": "High",
+            "description": "Tree is too young for optimal fruit production"
+        })
+    elif row['Tree Age'] > 15:
+        limiting_factors.append({
+            "factor": "Tree Age",
+            "issue": "Aging tree",
+            "impact": "Medium",
+            "description": "Tree is entering senescence phase"
+        })
+    
+    # Flowering factors
+    expected_buds = 100 if row['Tree Age'] < 3 else 200 if row['Tree Age'] < 10 else 150
+    if row['Flower Buds Count'] < expected_buds * 0.5:
+        limiting_factors.append({
+            "factor": "Flowering",
+            "issue": "Low flower bud count",
+            "impact": "High",
+            "description": "Insufficient flowers for optimal yield"
+        })
+    
+    # Leaf health factors
+    if row['Leaf Color'] != "Green":
+        limiting_factors.append({
+            "factor": "Leaf Health",
+            "issue": f"Abnormal leaf color ({row['Leaf Color']})",
+            "impact": "High" if row['Leaf Color'] == "Brown" else "Medium",
+            "description": "Poor leaf health affects photosynthesis and fruit development"
+        })
+    
+    # Soil moisture factors
+    if row['Soil Moisture'] != "Moderate":
+        limiting_factors.append({
+            "factor": "Soil Moisture",
+            "issue": f"Inappropriate moisture level ({row['Soil Moisture']})",
+            "impact": "High",
+            "description": "Sub-optimal moisture affects fruit development and quality"
+        })
+    
+    # Nutrient factors
+    if not row['Fertilizer Used']:
+        limiting_factors.append({
+            "factor": "Nutrients",
+            "issue": "No fertilizer application",
+            "impact": "High",
+            "description": "Lack of nutrients affects fruit development and yield"
+        })
+    
+    return limiting_factors
+
+def calculate_expected_yield_range(row):
+    """Calculate expected yield range based on input parameters"""
+    # Base yield range (kg per tree)
+    base_yield = {
+        "minimum": 15,
+        "maximum": 30,
+        "expected": 22.5
+    }
+    
+    # Adjust for tree age
+    if row['Tree Age'] < 3:
+        base_yield["minimum"] *= 0.5
+        base_yield["maximum"] *= 0.5
+        base_yield["expected"] *= 0.5
+    elif row['Tree Age'] > 15:
+        base_yield["minimum"] *= 0.7
+        base_yield["maximum"] *= 0.7
+        base_yield["expected"] *= 0.7
+    
+    # Adjust for flower buds
+    expected_buds = 100 if row['Tree Age'] < 3 else 200 if row['Tree Age'] < 10 else 150
+    bud_ratio = row['Flower Buds Count'] / expected_buds
+    if bud_ratio < 0.5:
+        base_yield["minimum"] *= 0.6
+        base_yield["maximum"] *= 0.6
+        base_yield["expected"] *= 0.6
+    
+    # Adjust for leaf health
+    if row['Leaf Color'] == "Yellow":
+        base_yield["minimum"] *= 0.7
+        base_yield["maximum"] *= 0.7
+        base_yield["expected"] *= 0.7
+    elif row['Leaf Color'] == "Brown":
+        base_yield["minimum"] *= 0.4
+        base_yield["maximum"] *= 0.4
+        base_yield["expected"] *= 0.4
+    
+    # Adjust for soil moisture
+    if row['Soil Moisture'] != "Moderate":
+        base_yield["minimum"] *= 0.7
+        base_yield["maximum"] *= 0.7
+        base_yield["expected"] *= 0.7
+    
+    # Adjust for fertilizer
+    if not row['Fertilizer Used']:
+        base_yield["minimum"] *= 0.8
+        base_yield["maximum"] *= 0.8
+        base_yield["expected"] *= 0.8
+    
+    # Round all values
+    return {
+        "minimum": round(base_yield["minimum"], 1),
+        "maximum": round(base_yield["maximum"], 1),
+        "expected": round(base_yield["expected"], 1),
+        "unit": "kg per tree"
+    }
+
+def generate_yield_recommendations(row):
+    """Generate recommendations to improve yield"""
+    recommendations = []
+    
+    # Tree age recommendations
+    if row['Tree Age'] < 3:
+        recommendations.append({
+            "category": "Tree Management",
+            "issue": "Young tree",
+            "recommendation": "Focus on establishing strong root system and proper pruning",
+            "priority": "High",
+            "expected_impact": "Long-term yield improvement"
+        })
+    elif row['Tree Age'] > 15:
+        recommendations.append({
+            "category": "Tree Management",
+            "issue": "Aging tree",
+            "recommendation": "Consider replacement or intensive care program",
+            "priority": "High",
+            "expected_impact": "Yield stabilization"
+        })
+    
+    # Flowering recommendations
+    expected_buds = 100 if row['Tree Age'] < 3 else 200 if row['Tree Age'] < 10 else 150
+    if row['Flower Buds Count'] < expected_buds * 0.5:
+        recommendations.append({
+            "category": "Flowering",
+            "issue": "Low flower bud count",
+            "recommendation": "Review pruning practices and ensure proper winter chilling",
+            "priority": "High",
+            "expected_impact": "Immediate yield improvement"
+        })
+    
+    # Leaf health recommendations
+    if row['Leaf Color'] != "Green":
+        recommendations.append({
+            "category": "Leaf Health",
+            "issue": f"Abnormal leaf color ({row['Leaf Color']})",
+            "recommendation": "Conduct leaf tissue analysis and adjust nutrient application",
+            "priority": "High" if row['Leaf Color'] == "Brown" else "Medium",
+            "expected_impact": "Medium-term yield improvement"
+        })
+    
+    # Soil moisture recommendations
+    if row['Soil Moisture'] != "Moderate":
+        recommendations.append({
+            "category": "Irrigation",
+            "issue": f"Inappropriate moisture level ({row['Soil Moisture']})",
+            "recommendation": "Adjust irrigation schedule to maintain optimal soil moisture",
+            "priority": "High",
+            "expected_impact": "Immediate yield improvement"
+        })
+    
+    # Fertilizer recommendations
+    if not row['Fertilizer Used']:
+        recommendations.append({
+            "category": "Nutrient Management",
+            "issue": "No fertilizer application",
+            "recommendation": "Develop and implement a fertilization program",
+            "priority": "High",
+            "expected_impact": "Medium-term yield improvement"
+        })
+    
+    # Add general recommendations
+    recommendations.append({
+        "category": "Monitoring",
+        "issue": "Regular yield assessment",
+        "recommendation": "Conduct regular yield assessments and maintain records",
+        "priority": "Medium",
+        "expected_impact": "Long-term yield optimization"
     })
     
     return recommendations
