@@ -64,17 +64,11 @@ class DiseaseAnalysisResponse(BaseModel):
     recommendations: List[Dict]
 
 class ChemicalAnalysisRequest(BaseModel):
-    Tree_ID: str
-    Tree_Species: str
-    Chemical_Compound: str
-    Previous_Dosage: float
-    Measurement_Date: str
-    Location: str
-    Season: str
-    Tree_Age_years: float
-    pH_Level: float
-    Soil_Type: str
-    Fruit_Stage: str
+    Leaf_Color: str  # Green, Yellow, Brown
+    Soil_pH: float   # 5.5 to 7.5
+    Moisture_Level: str  # Low, Medium, High
+    Chlorophyll_Content: str  # Low, Normal, High
+    Nitrogen_Level: str  # Low, Adequate, High
 
 @app.get("/")
 async def root():
@@ -329,289 +323,320 @@ async def detect_tree_disease(tree_id: str, image: UploadFile = File(...)):
 @app.post("/analyze/chemical")
 async def analyze_chemical(
     request: Request,
-    tree_id: str = Query(None),
-    tree_id_form: str = Form(None),
-    tree_species: str = Form(None),
-    chemical_compound: str = Form(None),
-    previous_dosage: float = Form(None),
-    measurement_date: str = Form(None),
-    location: str = Form(None),
-    season: str = Form(None),
-    tree_age: float = Form(None),
-    ph_level: float = Form(None),
-    soil_type: str = Form(None),
-    fruit_stage: str = Form(None)
+    leaf_color: str = Form(None),
+    soil_ph: float = Form(None),
+    moisture_level: str = Form(None),
+    chlorophyll_content: str = Form(None),
+    nitrogen_level: str = Form(None)
 ):
     """
-    Analyzes chemical composition and provides predictions for all chemical compounds.
+    Analyzes tree health based on 5 key parameters and provides detailed predictions and recommendations.
     """
     try:
         content_type = request.headers.get("content-type", "")
         
         if "application/x-www-form-urlencoded" in content_type:
             # Handle form data
-            if not all([tree_id_form, tree_species, chemical_compound, previous_dosage, 
-                       measurement_date, location, season, tree_age, ph_level, soil_type, fruit_stage]):
+            if not all([leaf_color, soil_ph, moisture_level, chlorophyll_content, nitrogen_level]):
                 raise HTTPException(status_code=400, detail="Missing required form fields")
             
             # Create a single row DataFrame
             df = pd.DataFrame([{
-                'Tree ID': tree_id_form,
-                'Tree Species': tree_species,
-                'Chemical Compound': chemical_compound,
-                'Previous Dosage': previous_dosage,
-                'Measurement Date': measurement_date,
-                'Location': location,
-                'Season': season,
-                'Tree Age (years)': tree_age,
-                'pH Level': ph_level,
-                'Soil Type': soil_type,
-                'Fruit Stage': fruit_stage
+                'Leaf Color': leaf_color,
+                'Soil pH': soil_ph,
+                'Moisture Level': moisture_level,
+                'Chlorophyll Content': chlorophyll_content,
+                'Nitrogen Level': nitrogen_level
             }])
             
-        elif "text/csv" in content_type:
-            # Read raw body as text
-            body = await request.body()
-            csv_text = body.decode("utf-8")
-            # Define columns (in order)
-            columns = [
-                "Tree ID", "Tree Species", "Chemical Compound", "Previous Dosage",
-                "Measurement Date", "Location", "Season", "Tree Age (years)", "pH Level", "Soil Type", "Fruit Stage"
-            ]
-            # Parse CSV into DataFrame
-            from io import StringIO
-            df = pd.read_csv(StringIO(csv_text), names=columns)
         else:
             # Assume JSON
             data = await request.json()
             df = pd.DataFrame(data)
             df = df.rename(columns={
-                'Tree_ID': 'Tree ID',
-                'Tree_Species': 'Tree Species',
-                'Chemical_Compound': 'Chemical Compound',
-                'Previous_Dosage': 'Previous Dosage',
-                'Measurement_Date': 'Measurement Date',
-                'Location': 'Location',
-                'Season': 'Season',
-                'Tree_Age_years': 'Tree Age (years)',
-                'pH_Level': 'pH Level',
-                'Soil_Type': 'Soil Type',
-                'Fruit_Stage': 'Fruit Stage',
+                'Leaf_Color': 'Leaf Color',
+                'Soil_pH': 'Soil pH',
+                'Moisture_Level': 'Moisture Level',
+                'Chlorophyll_Content': 'Chlorophyll Content',
+                'Nitrogen_Level': 'Nitrogen Level'
             })
-
-        # If tree_id is provided (either through query or form), filter for that tree
-        tree_id_to_use = tree_id or tree_id_form
-        if tree_id_to_use is not None:
-            df = df[df['Tree ID'] == tree_id_to_use]
-            if df.empty:
-                raise HTTPException(status_code=404, detail=f"Tree ID {tree_id_to_use} not found in input data")
 
         # Get the first row for analysis
         row = df.iloc[0]
         
-        # Get predictions for all chemical compounds
-        chemical_compounds = {
-            'Sugars': {'optimal_range': (2.5, 4.0), 'description': 'Primary energy source for fruit development'},
-            'Malic Acid': {'optimal_range': (0.8, 1.5), 'description': 'Key acid contributing to fruit flavor'},
-            'Vitamin C': {'optimal_range': (0.4, 0.8), 'description': 'Important antioxidant and nutrient'},
-            'Chlorophyll': {'optimal_range': (2.0, 3.0), 'description': 'Essential for photosynthesis'},
-            'Anthocyanins': {'optimal_range': (3.5, 4.5), 'description': 'Pigments responsible for fruit color'},
-            'Pectin': {'optimal_range': (1.2, 1.8), 'description': 'Important for fruit structure and texture'},
-            'Actinidin': {'optimal_range': (0.8, 1.2), 'description': 'Enzyme important for fruit ripening'},
-            'Fiber': {'optimal_range': (1.8, 2.4), 'description': 'Important for fruit structure and nutrition'}
+        # Validate input values
+        if row['Leaf Color'] not in ['Green', 'Yellow', 'Brown']:
+            raise HTTPException(status_code=400, detail="Invalid Leaf Color. Must be Green, Yellow, or Brown")
+        
+        if not 5.5 <= row['Soil pH'] <= 7.5:
+            raise HTTPException(status_code=400, detail="Invalid Soil pH. Must be between 5.5 and 7.5")
+        
+        if row['Moisture Level'] not in ['Low', 'Medium', 'High']:
+            raise HTTPException(status_code=400, detail="Invalid Moisture Level. Must be Low, Medium, or High")
+        
+        if row['Chlorophyll Content'] not in ['Low', 'Normal', 'High']:
+            raise HTTPException(status_code=400, detail="Invalid Chlorophyll Content. Must be Low, Normal, or High")
+        
+        if row['Nitrogen Level'] not in ['Low', 'Adequate', 'High']:
+            raise HTTPException(status_code=400, detail="Invalid Nitrogen Level. Must be Low, Adequate, or High")
+
+        # Analyze each parameter and generate predictions
+        analysis = {
+            "leaf_health": analyze_leaf_health(row['Leaf Color'], row['Chlorophyll Content']),
+            "soil_condition": analyze_soil_condition(row['Soil pH'], row['Moisture Level']),
+            "nutrient_status": analyze_nutrient_status(row['Nitrogen Level'], row['Soil pH']),
+            "overall_health": calculate_overall_health(row),
+            "predictions": generate_predictions(row),
+            "recommendations": generate_detailed_recommendations(row)
         }
 
-        chemical_analysis = {}
-        for compound, details in chemical_compounds.items():
-            optimal_range, prediction = get_optimal_range_and_prediction(
-                chemical_compound=compound,
-                previous_dosage=row['Previous Dosage'],
-                tree_age=row['Tree Age (years)'],
-                ph_level=row['pH Level'],
-                soil_type=row['Soil Type'],
-                fruit_stage=row['Fruit Stage'],
-                season=row['Season']
-            )
-            
-            chemical_analysis[compound] = {
-                "optimal_range": optimal_range,
-                "prediction": prediction,
-                "description": details['description'],
-                "previous_dosage": row['Previous Dosage']
-            }
-
-        # Generate recommendations for all compounds
-        recommendations = generate_recommendations(
-            chemical_compounds=chemical_analysis,
-            tree_age=row['Tree Age (years)'],
-            ph_level=row['pH Level'],
-            soil_type=row['Soil Type'],
-            fruit_stage=row['Fruit Stage']
-        )
-
-        return {
-            "tree_id": row['Tree ID'],
-            "tree_species": row['Tree Species'],
-            "chemical_analysis": chemical_analysis,
-            "environmental_factors": {
-                "tree_age": row['Tree Age (years)'],
-                "ph_level": row['pH Level'],
-                "soil_type": row['Soil Type'],
-                "fruit_stage": row['Fruit Stage'],
-                "season": row['Season'],
-                "location": row['Location']
-            },
-            "recommendations": recommendations
-        }
+        return analysis
 
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-def get_optimal_range_and_prediction(chemical_compound, previous_dosage, tree_age, ph_level, soil_type, fruit_stage, season):
-    """Get optimal range and prediction for a chemical compound"""
-    optimal_ranges = {
-        'Sugars': (2.5, 4.0),
-        'Malic Acid': (0.8, 1.5),
-        'Vitamin C': (0.4, 0.8),
-        'Chlorophyll': (2.0, 3.0),
-        'Anthocyanins': (3.5, 4.5),
-        'Pectin': (1.2, 1.8),
-        'Actinidin': (0.8, 1.2),
-        'Fiber': (1.8, 2.4)
+def analyze_leaf_health(leaf_color, chlorophyll_content):
+    """Analyze leaf health based on color and chlorophyll content"""
+    health_status = "Good"
+    issues = []
+    
+    if leaf_color == "Yellow":
+        health_status = "Poor"
+        issues.append("Leaf yellowing indicates potential nutrient deficiency or stress")
+    elif leaf_color == "Brown":
+        health_status = "Critical"
+        issues.append("Leaf browning suggests severe stress or disease")
+    
+    if chlorophyll_content == "Low":
+        health_status = "Poor" if health_status == "Good" else health_status
+        issues.append("Low chlorophyll content indicates reduced photosynthetic capacity")
+    elif chlorophyll_content == "High":
+        health_status = "Excellent"
+        issues.append("High chlorophyll content indicates optimal photosynthetic activity")
+    
+    return {
+        "status": health_status,
+        "issues": issues,
+        "details": {
+            "leaf_color": leaf_color,
+            "chlorophyll_content": chlorophyll_content,
+            "photosynthetic_efficiency": "High" if chlorophyll_content == "High" else "Low" if chlorophyll_content == "Low" else "Normal"
+        }
     }
 
-    if chemical_compound not in optimal_ranges:
-        return "N/A", "Unknown compound"
-
-    min_val, max_val = optimal_ranges[chemical_compound]
-    optimal_range = f"{min_val} - {max_val}"
-
-    # Calculate prediction based on environmental factors
-    prediction_factors = {
-        'tree_age': 1.0,
-        'ph_level': 1.0,
-        'soil_type': 1.0,
-        'fruit_stage': 1.0,
-        'season': 1.0
+def analyze_soil_condition(soil_ph, moisture_level):
+    """Analyze soil condition based on pH and moisture"""
+    condition = "Good"
+    issues = []
+    
+    # pH analysis
+    if soil_ph < 6.0:
+        condition = "Poor"
+        issues.append("Soil is too acidic, may affect nutrient availability")
+    elif soil_ph > 7.0:
+        condition = "Poor"
+        issues.append("Soil is too alkaline, may affect nutrient uptake")
+    
+    # Moisture analysis
+    if moisture_level == "Low":
+        condition = "Poor" if condition == "Good" else condition
+        issues.append("Low moisture levels may cause water stress")
+    elif moisture_level == "High":
+        condition = "Poor" if condition == "Good" else condition
+        issues.append("Excessive moisture may lead to root problems")
+    
+    return {
+        "status": condition,
+        "issues": issues,
+        "details": {
+            "soil_ph": soil_ph,
+            "moisture_level": moisture_level,
+            "nutrient_availability": "Optimal" if 6.0 <= soil_ph <= 7.0 else "Sub-optimal"
+        }
     }
 
-    # Adjust based on tree age
-    if tree_age < 3:
-        prediction_factors['tree_age'] = 0.7  # Young trees tend to have lower values
-    elif tree_age > 10:
-        prediction_factors['tree_age'] = 0.9  # Mature trees tend to have slightly lower values
+def analyze_nutrient_status(nitrogen_level, soil_ph):
+    """Analyze nutrient status based on nitrogen level and soil pH"""
+    status = "Good"
+    issues = []
+    
+    if nitrogen_level == "Low":
+        status = "Poor"
+        issues.append("Low nitrogen levels may affect growth and development")
+    elif nitrogen_level == "High":
+        status = "Good"
+        issues.append("High nitrogen levels may affect fruit quality")
+    
+    # Consider pH impact on nutrient availability
+    if not 6.0 <= soil_ph <= 7.0:
+        issues.append("Sub-optimal soil pH may affect nutrient uptake")
+    
+    return {
+        "status": status,
+        "issues": issues,
+        "details": {
+            "nitrogen_level": nitrogen_level,
+            "nutrient_uptake_efficiency": "High" if 6.0 <= soil_ph <= 7.0 else "Low",
+            "fertilization_needed": "Yes" if nitrogen_level == "Low" else "No"
+        }
+    }
 
-    # Adjust based on pH level
-    if 6.0 <= ph_level <= 7.0:
-        prediction_factors['ph_level'] = 1.2  # Optimal pH range
+def calculate_overall_health(row):
+    """Calculate overall tree health based on all parameters"""
+    health_scores = {
+        "leaf_health": 1.0,
+        "soil_condition": 1.0,
+        "nutrient_status": 1.0
+    }
+    
+    # Leaf health scoring
+    if row['Leaf Color'] == "Green":
+        health_scores["leaf_health"] = 1.0
+    elif row['Leaf Color'] == "Yellow":
+        health_scores["leaf_health"] = 0.6
+    else:  # Brown
+        health_scores["leaf_health"] = 0.3
+    
+    if row['Chlorophyll Content'] == "High":
+        health_scores["leaf_health"] *= 1.2
+    elif row['Chlorophyll Content'] == "Low":
+        health_scores["leaf_health"] *= 0.7
+    
+    # Soil condition scoring
+    if 6.0 <= row['Soil pH'] <= 7.0:
+        health_scores["soil_condition"] = 1.0
     else:
-        prediction_factors['ph_level'] = 0.8  # Sub-optimal pH
-
-    # Adjust based on soil type
-    if soil_type == 'Loamy':
-        prediction_factors['soil_type'] = 1.2
-    elif soil_type == 'Sandy':
-        prediction_factors['soil_type'] = 0.9
-    elif soil_type == 'Clay':
-        prediction_factors['soil_type'] = 0.8
-
-    # Adjust based on fruit stage
-    if fruit_stage == 'Early Development':
-        prediction_factors['fruit_stage'] = 0.7
-    elif fruit_stage == 'Growth':
-        prediction_factors['fruit_stage'] = 0.9
-    elif fruit_stage == 'Maturation':
-        prediction_factors['fruit_stage'] = 1.1
-    elif fruit_stage == 'Ripening':
-        prediction_factors['fruit_stage'] = 1.2
-    elif fruit_stage == 'Harvest Ready':
-        prediction_factors['fruit_stage'] = 1.0
-
-    # Adjust based on season
-    if season == 'Spring':
-        prediction_factors['season'] = 1.2
-    elif season == 'Summer':
-        prediction_factors['season'] = 1.1
-    elif season == 'Fall':
-        prediction_factors['season'] = 0.9
-    elif season == 'Winter':
-        prediction_factors['season'] = 0.8
-
-    # Calculate overall prediction factor
-    overall_factor = 1.0
-    for factor in prediction_factors.values():
-        overall_factor *= factor
-
-    # Calculate predicted value based on previous dosage and factors
-    predicted_value = previous_dosage * overall_factor
-
-    # Determine prediction status
-    if min_val <= predicted_value <= max_val:
-        prediction = "Optimal"
-    elif predicted_value < min_val:
-        prediction = "Below Optimal"
+        health_scores["soil_condition"] = 0.7
+    
+    if row['Moisture Level'] == "Medium":
+        health_scores["soil_condition"] *= 1.0
+    elif row['Moisture Level'] in ["Low", "High"]:
+        health_scores["soil_condition"] *= 0.8
+    
+    # Nutrient status scoring
+    if row['Nitrogen Level'] == "Adequate":
+        health_scores["nutrient_status"] = 1.0
+    elif row['Nitrogen Level'] == "High":
+        health_scores["nutrient_status"] = 0.9
+    else:  # Low
+        health_scores["nutrient_status"] = 0.6
+    
+    # Calculate overall score
+    overall_score = sum(health_scores.values()) / len(health_scores)
+    
+    # Determine health status
+    if overall_score >= 0.9:
+        status = "Excellent"
+    elif overall_score >= 0.7:
+        status = "Good"
+    elif overall_score >= 0.5:
+        status = "Fair"
     else:
-        prediction = "Above Optimal"
+        status = "Poor"
+    
+    return {
+        "overall_score": round(overall_score * 100, 1),
+        "status": status,
+        "component_scores": {
+            "leaf_health": round(health_scores["leaf_health"] * 100, 1),
+            "soil_condition": round(health_scores["soil_condition"] * 100, 1),
+            "nutrient_status": round(health_scores["nutrient_status"] * 100, 1)
+        }
+    }
 
-    return optimal_range, prediction
+def generate_predictions(row):
+    """Generate predictions based on current conditions"""
+    predictions = {
+        "growth_potential": "High",
+        "fruit_quality": "Good",
+        "disease_risk": "Low",
+        "yield_potential": "High",
+        "recovery_time": "None"
+    }
+    
+    # Adjust predictions based on leaf health
+    if row['Leaf Color'] != "Green" or row['Chlorophyll Content'] == "Low":
+        predictions["growth_potential"] = "Low"
+        predictions["yield_potential"] = "Low"
+        predictions["recovery_time"] = "2-3 months"
+    
+    # Adjust predictions based on soil condition
+    if not 6.0 <= row['Soil pH'] <= 7.0 or row['Moisture Level'] != "Medium":
+        predictions["fruit_quality"] = "Fair"
+        predictions["disease_risk"] = "Medium"
+    
+    # Adjust predictions based on nutrient status
+    if row['Nitrogen Level'] == "Low":
+        predictions["growth_potential"] = "Low"
+        predictions["yield_potential"] = "Low"
+        predictions["recovery_time"] = "1-2 months"
+    elif row['Nitrogen Level'] == "High":
+        predictions["fruit_quality"] = "Fair"
+    
+    return predictions
 
-def generate_recommendations(chemical_compounds, tree_age, ph_level, soil_type, fruit_stage):
-    """Generate recommendations based on analysis of all chemical compounds"""
+def generate_detailed_recommendations(row):
+    """Generate detailed recommendations based on analysis"""
     recommendations = []
-
-    # Chemical compound specific recommendations
-    for compound, analysis in chemical_compounds.items():
-        if analysis['prediction'] != "Optimal":
-            recommendations.append({
-                "factor": "Chemical Levels",
-                "issue": f"{compound} levels are predicted to be {analysis['prediction'].lower()}",
-                "recommendation": f"Consider adjusting management practices to achieve optimal {compound} levels"
-            })
-
-    # pH level recommendations
-    if not 6.0 <= ph_level <= 7.0:
+    
+    # Leaf health recommendations
+    if row['Leaf Color'] != "Green":
         recommendations.append({
-            "factor": "Soil pH",
-            "issue": f"Sub-optimal pH level ({ph_level})",
-            "recommendation": "Consider soil amendment to achieve optimal pH range (6.0-7.0)"
+            "category": "Leaf Health",
+            "issue": f"Abnormal leaf color ({row['Leaf Color']})",
+            "recommendation": "Conduct leaf tissue analysis and adjust nutrient application accordingly",
+            "priority": "High" if row['Leaf Color'] == "Brown" else "Medium"
         })
-
-    # Tree age recommendations
-    if tree_age < 3:
+    
+    if row['Chlorophyll Content'] == "Low":
         recommendations.append({
-            "factor": "Tree Age",
-            "issue": "Young tree",
-            "recommendation": "Focus on establishing strong root system and proper pruning"
+            "category": "Leaf Health",
+            "issue": "Low chlorophyll content",
+            "recommendation": "Increase nitrogen application and ensure proper sunlight exposure",
+            "priority": "High"
         })
-    elif tree_age > 10:
+    
+    # Soil condition recommendations
+    if not 6.0 <= row['Soil pH'] <= 7.0:
         recommendations.append({
-            "factor": "Tree Age",
-            "issue": "Mature tree",
-            "recommendation": "Monitor health closely and consider rejuvenation pruning if needed"
+            "category": "Soil Management",
+            "issue": f"Sub-optimal soil pH ({row['Soil pH']})",
+            "recommendation": "Apply appropriate soil amendments to adjust pH to optimal range (6.0-7.0)",
+            "priority": "High"
         })
-
-    # Soil type recommendations
-    if soil_type not in ['Loamy', 'Sandy']:
+    
+    if row['Moisture Level'] != "Medium":
         recommendations.append({
-            "factor": "Soil Type",
-            "issue": f"Current soil type ({soil_type}) may not be optimal",
-            "recommendation": "Consider soil improvement measures"
+            "category": "Irrigation",
+            "issue": f"Inappropriate moisture level ({row['Moisture Level']})",
+            "recommendation": "Adjust irrigation schedule to maintain optimal soil moisture",
+            "priority": "High"
         })
-
-    # Fruit stage recommendations
-    if fruit_stage == 'Early Development':
+    
+    # Nutrient management recommendations
+    if row['Nitrogen Level'] == "Low":
         recommendations.append({
-            "factor": "Fruit Stage",
-            "issue": "Early development stage",
-            "recommendation": "Ensure adequate nutrient supply for proper development"
+            "category": "Nutrient Management",
+            "issue": "Low nitrogen levels",
+            "recommendation": "Apply nitrogen-rich fertilizer according to recommended rates",
+            "priority": "High"
         })
-    elif fruit_stage == 'Ripening':
+    elif row['Nitrogen Level'] == "High":
         recommendations.append({
-            "factor": "Fruit Stage",
-            "issue": "Ripening stage",
-            "recommendation": "Monitor chemical levels and adjust management practices accordingly"
+            "category": "Nutrient Management",
+            "issue": "High nitrogen levels",
+            "recommendation": "Reduce nitrogen application and monitor for excessive vegetative growth",
+            "priority": "Medium"
         })
-
+    
+    # Add general recommendations
+    recommendations.append({
+        "category": "Monitoring",
+        "issue": "Regular health assessment",
+        "recommendation": "Conduct regular leaf and soil analysis to monitor changes",
+        "priority": "Medium"
+    })
+    
     return recommendations
 
 # if __name__ == "__main__":
