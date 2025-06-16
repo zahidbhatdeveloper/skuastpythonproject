@@ -328,59 +328,70 @@ async def detect_tree_disease(tree_id: str, image: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/analyze/chemical")
-async def analyze_chemical(request: Request, tree_id: str = Query(None), data: str = Form(None)):
+async def analyze_chemical(
+    request: Request,
+    tree_id: str = Query(None),
+    tree_id_form: str = Form(None),
+    tree_species: str = Form(None),
+    chemical_compound: str = Form(None),
+    concentration: float = Form(None),
+    previous_dosage: float = Form(None),
+    measurement_date: str = Form(None),
+    location: str = Form(None),
+    season: str = Form(None),
+    tree_age: float = Form(None),
+    ph_level: float = Form(None),
+    soil_type: str = Form(None),
+    fruit_stage: str = Form(None)
+):
     """
-    Accepts JSON, CSV, or form data (with a 'data' field containing CSV or JSON) in the POST body.
-    If CSV, parses it and analyzes the data for the tree.
-    If JSON, behaves as before.
-    If form, parses the 'data' field.
+    Accepts data through:
+    1. JSON (list of dicts)
+    2. CSV (text/csv)
+    3. Form data (application/x-www-form-urlencoded)
     """
     try:
         content_type = request.headers.get("content-type", "")
-        df = None
-        if data is not None:
-            # Data provided via form
-            if data.strip().startswith("["):
-                # JSON array
-                import json
-                records = json.loads(data)
-                df = pd.DataFrame(records)
-                df = df.rename(columns={
-                    'Tree_ID': 'Tree ID',
-                    'Tree_Species': 'Tree Species',
-                    'Chemical_Compound': 'Chemical Compound',
-                    'Concentration': 'Concentration',
-                    'Previous_Dosage': 'Previous Dosage',
-                    'Measurement_Date': 'Measurement Date',
-                    'Location': 'Location',
-                    'Season': 'Season',
-                    'Tree_Age_years': 'Tree Age (years)',
-                    'pH_Level': 'pH Level',
-                    'Soil_Type': 'Soil Type',
-                    'Fruit_Stage': 'Fruit Stage',
-                })
-            else:
-                # Assume CSV
-                from io import StringIO
-                columns = [
-                    "Tree ID", "Tree Species", "Chemical Compound", "Concentration", "Previous Dosage",
-                    "Measurement Date", "Location", "Season", "Tree Age (years)", "pH Level", "Soil Type", "Fruit Stage"
-                ]
-                df = pd.read_csv(StringIO(data), names=columns)
+        
+        if "application/x-www-form-urlencoded" in content_type:
+            # Handle form data
+            if not all([tree_id_form, tree_species, chemical_compound, concentration, 
+                       previous_dosage, measurement_date, location, season, 
+                       tree_age, ph_level, soil_type, fruit_stage]):
+                raise HTTPException(status_code=400, detail="Missing required form fields")
+            
+            # Create a single row DataFrame
+            df = pd.DataFrame([{
+                'Tree ID': tree_id_form,
+                'Tree Species': tree_species,
+                'Chemical Compound': chemical_compound,
+                'Concentration': concentration,
+                'Previous Dosage': previous_dosage,
+                'Measurement Date': measurement_date,
+                'Location': location,
+                'Season': season,
+                'Tree Age (years)': tree_age,
+                'pH Level': ph_level,
+                'Soil Type': soil_type,
+                'Fruit Stage': fruit_stage
+            }])
+            
         elif "text/csv" in content_type:
             # Read raw body as text
             body = await request.body()
             csv_text = body.decode("utf-8")
+            # Define columns (in order)
             columns = [
                 "Tree ID", "Tree Species", "Chemical Compound", "Concentration", "Previous Dosage",
                 "Measurement Date", "Location", "Season", "Tree Age (years)", "pH Level", "Soil Type", "Fruit Stage"
             ]
+            # Parse CSV into DataFrame
             from io import StringIO
             df = pd.read_csv(StringIO(csv_text), names=columns)
         else:
             # Assume JSON
-            data_json = await request.json()
-            df = pd.DataFrame(data_json)
+            data = await request.json()
+            df = pd.DataFrame(data)
             df = df.rename(columns={
                 'Tree_ID': 'Tree ID',
                 'Tree_Species': 'Tree Species',
@@ -395,14 +406,19 @@ async def analyze_chemical(request: Request, tree_id: str = Query(None), data: s
                 'Soil_Type': 'Soil Type',
                 'Fruit_Stage': 'Fruit Stage',
             })
-        # If tree_id is provided, filter for that tree
-        if tree_id is not None:
-            df = df[df['Tree ID'] == tree_id]
+
+        # If tree_id is provided (either through query or form), filter for that tree
+        tree_id_to_use = tree_id or tree_id_form
+        if tree_id_to_use is not None:
+            df = df[df['Tree ID'] == tree_id_to_use]
             if df.empty:
-                raise HTTPException(status_code=404, detail=f"Tree ID {tree_id} not found in input data")
+                raise HTTPException(status_code=404, detail=f"Tree ID {tree_id_to_use} not found in input data")
+
+        # Rest of the analysis code remains the same
         tree_id_val = df['Tree ID'].iloc[0]
         tree_species = df['Tree Species'].iloc[0]
         tree_data = df
+
         # Calculate chemical compound statistics
         chemical_compounds = {}
         for compound in tree_data['Chemical Compound'].unique():
