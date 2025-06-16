@@ -340,16 +340,7 @@ async def detect_tree_disease(tree_id: str, image: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/tree/data", response_model=TreeDataResponse)
-async def insert_tree_data(tree_data: TreeData):
-    """
-    Insert data for a single tree and get analysis results
-    
-    Parameters:
-    - tree_data: TreeData object containing all measurements and environmental factors
-    
-    Returns:
-    - Analysis results and recommendations for the tree
-    """
+async def analyze_tree_data(tree_data: TreeData):
     try:
         # Convert the input data to a DataFrame format
         records = []
@@ -369,24 +360,15 @@ async def insert_tree_data(tree_data: TreeData):
                 'Fruit Stage': tree_data.fruit_stage
             }
             records.append(record)
-        
-        # Create DataFrame
         df = pd.DataFrame(records)
-        
-        # Initialize analyzer with the new data
-        chemical_analyzer.data = df
-        
-        # Get analysis results
+
+        # Analyze the data (simple example, can be replaced with your logic)
         analysis_results = {}
         recommendations = []
-        
-        # Calculate chemical compound statistics
         for compound in df['Chemical Compound'].unique():
             compound_data = df[df['Chemical Compound'] == compound]
             mean_conc = compound_data['Concentration'].mean()
             mean_dosage = compound_data['Dosage'].mean()
-            
-            # Define optimal ranges and status
             optimal_range = "N/A"
             status = "N/A"
             if compound == 'Sugars':
@@ -413,37 +395,24 @@ async def insert_tree_data(tree_data: TreeData):
             elif compound == 'Fiber':
                 optimal_range = "1.8 - 2.4"
                 status = "Optimal" if 1.8 <= mean_conc <= 2.4 else "Sub-optimal"
-            
             analysis_results[compound] = {
                 "concentration": round(mean_conc, 3),
                 "dosage": round(mean_dosage, 3),
                 "optimal_range": optimal_range,
                 "status": status
             }
-            
-            # Generate recommendations
             if status == "Sub-optimal":
-                if compound == 'Sugars':
-                    recommendations.append({
-                        "compound": compound,
-                        "issue": f"Sugar levels are {'low' if mean_conc < 2.5 else 'high'}",
-                        "recommendation": "Consider adjusting fertilization and irrigation."
-                    })
-                elif compound == 'Malic Acid':
-                    recommendations.append({
-                        "compound": compound,
-                        "issue": f"Malic acid levels are {'low' if mean_conc < 0.8 else 'high'}",
-                        "recommendation": "Review fruit maturity and harvest timing."
-                    })
-                # Add similar recommendations for other compounds...
-        
-        # Calculate overall health score
+                recommendations.append({
+                    "compound": compound,
+                    "issue": f"{compound} levels are {'low' if mean_conc < float(optimal_range.split(' - ')[0]) else 'high'}",
+                    "recommendation": "Please review management practices."
+                })
+        # Overall health score
         health_scores = []
         for compound in df['Chemical Compound'].unique():
             compound_data = df[df['Chemical Compound'] == compound]
             mean_conc = compound_data['Concentration'].mean()
-            
-            score = 1  # Default score if not a key compound
+            score = 1
             if compound == 'Sugars':
                 score = 1 if 2.5 <= mean_conc <= 4.0 else 0.5
             elif compound == 'Malic Acid':
@@ -460,19 +429,15 @@ async def insert_tree_data(tree_data: TreeData):
                 score = 1 if 0.8 <= mean_conc <= 1.2 else 0.5
             elif compound == 'Fiber':
                 score = 1 if 1.8 <= mean_conc <= 2.4 else 0.5
-                
             health_scores.append(score)
-        
         overall_score = (sum(health_scores) / len(health_scores) * 100) if health_scores else 0
-        
         analysis_results["overall_health"] = {
             "score": round(overall_score, 1),
-            "status": "Excellent - All chemical parameters are within optimal ranges" if overall_score >= 90 else 
-                     ("Good - Most chemical parameters are within optimal ranges" if overall_score >= 75 else 
-                     ("Fair - Some chemical parameters need attention" if overall_score >= 60 else 
+            "status": "Excellent - All chemical parameters are within optimal ranges" if overall_score >= 90 else \
+                     ("Good - Most chemical parameters are within optimal ranges" if overall_score >= 75 else \
+                     ("Fair - Some chemical parameters need attention" if overall_score >= 60 else \
                      "Poor - Multiple chemical parameters need attention"))
         }
-        
         return {
             "tree_id": tree_data.tree_id,
             "tree_species": tree_data.tree_species,
@@ -480,7 +445,6 @@ async def insert_tree_data(tree_data: TreeData):
             "recommendations": recommendations,
             "status": "success"
         }
-        
     except Exception as e:
         logger.error(f"Error in tree data analysis: {str(e)}")
         logger.error(f"Traceback: {traceback.format_exc()}")
