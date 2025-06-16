@@ -20,48 +20,42 @@ sns.set_theme(style="whitegrid")
 class TreeYieldAnalyzer:
     def __init__(self):
         self.data = None
-        self.data_dir = "data"
-        os.makedirs(self.data_dir, exist_ok=True)
+        self.data_dir = 'data'
         
+        # Create data directory if it doesn't exist
+        if not os.path.exists(self.data_dir):
+            os.makedirs(self.data_dir)
+    
     def load_data(self, file_path):
-        """Load yield data from CSV file"""
+        """Load data from CSV file"""
         try:
             self.data = pd.read_csv(file_path)
-            print(f"Yield data loaded successfully with {len(self.data)} records")
-            # Convert date column to datetime
-            self.data['Measurement Date'] = pd.to_datetime(self.data['Measurement Date'])
-            # Print available tree IDs
-            print("\nAvailable Tree IDs:")
-            for species in self.data['Tree Species'].unique():
-                tree_ids = self.data[self.data['Tree Species'] == species]['Tree ID'].unique()
-                print(f"{species}: {', '.join(tree_ids)}")
+            print(f"Data loaded successfully with {len(self.data)} records")
+            return True
         except Exception as e:
             print(f"Error loading data: {str(e)}")
+            return False
     
     def analyze_yield(self, tree_age, flower_buds_count, leaf_color, soil_moisture, fertilizer_used):
         """
         Analyzes yield potential based on key parameters and provides detailed predictions and recommendations.
-        
-        Parameters:
-        - tree_age (float): Age of the tree in years
-        - flower_buds_count (int): Number of flowers/fruit buds
-        - leaf_color (str): Leaf color (Green, Yellow, Brown)
-        - soil_moisture (str): Soil moisture level (Dry, Moderate, Wet)
-        - fertilizer_used (bool): Whether fertilizer has been applied (True/False)
         """
         try:
             # Validate input values
-            if tree_age < 0:
-                raise ValueError("Tree age cannot be negative")
+            if not isinstance(tree_age, (int, float)) or tree_age < 0:
+                raise ValueError("Tree age must be a positive number")
             
-            if flower_buds_count < 0:
-                raise ValueError("Flower buds count cannot be negative")
+            if not isinstance(flower_buds_count, int) or flower_buds_count < 0:
+                raise ValueError("Flower buds count must be a positive integer")
             
             if leaf_color not in ['Green', 'Yellow', 'Brown']:
                 raise ValueError("Invalid Leaf Color. Must be Green, Yellow, or Brown")
             
             if soil_moisture not in ['Dry', 'Moderate', 'Wet']:
                 raise ValueError("Invalid Soil Moisture. Must be Dry, Moderate, or Wet")
+            
+            if not isinstance(fertilizer_used, bool):
+                raise ValueError("Fertilizer Used must be a boolean value (True/False)")
             
             # Create a single row DataFrame for analysis
             df = pd.DataFrame([{
@@ -486,12 +480,48 @@ def main():
         
         if choice == '1':
             try:
-                # Get input parameters
-                tree_age = float(input("Enter tree age (years): "))
-                flower_buds_count = int(input("Enter number of flower buds: "))
-                leaf_color = input("Enter leaf color (Green/Yellow/Brown): ").strip().capitalize()
-                soil_moisture = input("Enter soil moisture (Dry/Moderate/Wet): ").strip().capitalize()
-                fertilizer_used = input("Has fertilizer been used? (Yes/No): ").strip().lower() == 'yes'
+                # Get input parameters with validation
+                while True:
+                    try:
+                        tree_age = float(input("Enter tree age (years): "))
+                        if tree_age < 0:
+                            print("Tree age cannot be negative. Please try again.")
+                            continue
+                        break
+                    except ValueError:
+                        print("Please enter a valid number for tree age.")
+                
+                while True:
+                    try:
+                        flower_buds_count = int(input("Enter number of flower buds: "))
+                        if flower_buds_count < 0:
+                            print("Flower buds count cannot be negative. Please try again.")
+                            continue
+                        break
+                    except ValueError:
+                        print("Please enter a valid integer for flower buds count.")
+                
+                while True:
+                    leaf_color = input("Enter leaf color (Green/Yellow/Brown): ").strip().capitalize()
+                    if leaf_color not in ['Green', 'Yellow', 'Brown']:
+                        print("Invalid leaf color. Please enter Green, Yellow, or Brown.")
+                        continue
+                    break
+                
+                while True:
+                    soil_moisture = input("Enter soil moisture (Dry/Moderate/Wet): ").strip().capitalize()
+                    if soil_moisture not in ['Dry', 'Moderate', 'Wet']:
+                        print("Invalid soil moisture. Please enter Dry, Moderate, or Wet.")
+                        continue
+                    break
+                
+                while True:
+                    fertilizer_input = input("Has fertilizer been used? (Yes/No): ").strip().lower()
+                    if fertilizer_input not in ['yes', 'no']:
+                        print("Please enter Yes or No.")
+                        continue
+                    fertilizer_used = fertilizer_input == 'yes'
+                    break
                 
                 # Perform analysis
                 yield_analysis, report_path = analyzer.analyze_yield(
@@ -510,9 +540,9 @@ def main():
                     # Open the report in the default web browser
                     import webbrowser
                     webbrowser.open(f'file://{os.path.abspath(report_path)}')
+                else:
+                    print("Analysis failed. Please check the input parameters and try again.")
                 
-            except ValueError as e:
-                print(f"Error: {str(e)}")
             except Exception as e:
                 print(f"An error occurred: {str(e)}")
         
