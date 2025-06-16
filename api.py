@@ -658,7 +658,7 @@ def generate_detailed_recommendations(row):
     
     return recommendations
 
-<<<<<<< HEAD
+
 @app.post("/analyze/tree-health")
 async def analyze_tree_health(
     request: Request,
