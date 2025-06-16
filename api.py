@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, UploadFile, File
+from fastapi import FastAPI, HTTPException, UploadFile, File, Body
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Dict, List, Optional
@@ -62,6 +62,20 @@ class DiseaseAnalysisResponse(BaseModel):
     color_analysis: Dict
     texture_analysis: Dict
     recommendations: List[Dict]
+
+class ChemicalAnalysisRequest(BaseModel):
+    Tree_ID: str
+    Tree_Species: str
+    Chemical_Compound: str
+    Concentration: float
+    Previous_Dosage: float
+    Measurement_Date: str
+    Location: str
+    Season: str
+    Tree_Age_years: float
+    pH_Level: float
+    Soil_Type: str
+    Fruit_Stage: str
 
 @app.get("/")
 async def root():
@@ -312,6 +326,191 @@ async def detect_tree_disease(tree_id: str, image: UploadFile = File(...)):
         logger.error(f"Error in disease detection: {str(e)}")
         logger.error(f"Traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/analyze/chemical")
+async def analyze_chemical(request: List[dict] = Body(...)):
+    """
+    Accepts a list of records (each record is a dict with all fields from the CSV),
+    performs chemical analysis, and returns the same structure as GET /tree/{tree_id}.
+    """
+    try:
+        # Convert input to DataFrame
+        df = pd.DataFrame(request)
+        # Rename columns to match code expectations
+        df = df.rename(columns={
+            'Tree_ID': 'Tree ID',
+            'Tree_Species': 'Tree Species',
+            'Chemical_Compound': 'Chemical Compound',
+            'Concentration': 'Concentration',
+            'Previous_Dosage': 'Previous Dosage',
+            'Measurement_Date': 'Measurement Date',
+            'Location': 'Location',
+            'Season': 'Season',
+            'Tree_Age_years': 'Tree Age (years)',
+            'pH_Level': 'pH Level',
+            'Soil_Type': 'Soil Type',
+            'Fruit_Stage': 'Fruit Stage',
+        })
+        # Use the same logic as get_tree_analysis, but on this DataFrame
+        tree_id = df['Tree ID'].iloc[0]
+        tree_species = df['Tree Species'].iloc[0]
+        tree_data = df
+        # (Copy the analysis logic from get_tree_analysis, but use tree_data)
+        # Calculate chemical compound statistics
+        chemical_compounds = {}
+        for compound in tree_data['Chemical Compound'].unique():
+            compound_data = tree_data[tree_data['Chemical Compound'] == compound]
+            mean_conc = compound_data['Concentration'].mean()
+            min_conc = compound_data['Concentration'].min()
+            max_conc = compound_data['Concentration'].max()
+            std_dev = compound_data['Concentration'].std()
+            cv = (std_dev / mean_conc * 100) if mean_conc != 0 and not pd.isna(std_dev) else float('nan')
+            # Define optimal ranges and status
+            optimal_range = "N/A"
+            status = "N/A"
+            if compound == 'Sugars':
+                optimal_range = "2.5 - 4.0"
+                status = "Optimal" if 2.5 <= mean_conc <= 4.0 else "Sub-optimal"
+            elif compound == 'Malic Acid':
+                optimal_range = "0.8 - 1.5"
+                status = "Optimal" if 0.8 <= mean_conc <= 1.5 else "Sub-optimal"
+            elif compound == 'Vitamin C':
+                optimal_range = "0.4 - 0.8"
+                status = "Optimal" if 0.4 <= mean_conc <= 0.8 else "Sub-optimal"
+            elif compound == 'Chlorophyll':
+                optimal_range = "2.0 - 3.0"
+                status = "Optimal" if 2.0 <= mean_conc <= 3.0 else "Sub-optimal"
+            elif compound == 'Anthocyanins':
+                optimal_range = "3.5 - 4.5"
+                status = "Optimal" if 3.5 <= mean_conc <= 4.5 else "Sub-optimal"
+            elif compound == 'Pectin':
+                optimal_range = "1.2 - 1.8"
+                status = "Optimal" if 1.2 <= mean_conc <= 1.8 else "Sub-optimal"
+            elif compound == 'Actinidin':
+                optimal_range = "0.8 - 1.2"
+                status = "Optimal" if 0.8 <= mean_conc <= 1.2 else "Sub-optimal"
+            elif compound == 'Fiber':
+                optimal_range = "1.8 - 2.4"
+                status = "Optimal" if 1.8 <= mean_conc <= 2.4 else "Sub-optimal"
+            chemical_compounds[compound] = {
+                "mean_concentration": round(mean_conc, 3),
+                "range": f"{round(min_conc, 3)} - {round(max_conc, 3)}",
+                "std_dev": round(std_dev, 3) if not pd.isna(std_dev) else None,
+                "cv_percent": round(cv, 1) if not pd.isna(cv) else None,
+                "optimal_range": optimal_range,
+                "status": status
+            }
+        # Calculate environmental factors
+        environmental_factors = {
+            "pH_level": {
+                "mean": round(tree_data['pH Level'].mean(), 2),
+                "range": f"{round(tree_data['pH Level'].min(), 2)} - {round(tree_data['pH Level'].max(), 2)}",
+                "optimal_range": "6.0 - 7.0",
+                "status": "Optimal" if 6.0 <= tree_data['pH Level'].mean() <= 7.0 else "Sub-optimal"
+            },
+            "tree_age": {
+                "mean": round(tree_data['Tree Age (years)'].mean(), 1),
+                "range": f"{round(tree_data['Tree Age (years)'].min(), 1)} - {round(tree_data['Tree Age (years)'].max(), 1)}",
+                "growth_stage": "Mature" if tree_data['Tree Age (years)'].mean() > 5 else "Young"
+            },
+            "soil_type": tree_data['Soil Type'].mode()[0],
+            "fruit_stage": tree_data['Fruit Stage'].mode()[0],
+            "location": tree_data['Location'].mode()[0]
+        }
+        # Calculate overall assessment
+        health_scores = []
+        for compound in tree_data['Chemical Compound'].unique():
+            compound_data = tree_data[tree_data['Chemical Compound'] == compound]
+            mean_conc = compound_data['Concentration'].mean()
+            score = 1  # Default score if not a key compound
+            if compound == 'Sugars':
+                score = 1 if 2.5 <= mean_conc <= 4.0 else 0.5
+            elif compound == 'Malic Acid':
+                score = 1 if 0.8 <= mean_conc <= 1.5 else 0.5
+            elif compound == 'Vitamin C':
+                score = 1 if 0.4 <= mean_conc <= 0.8 else 0.5
+            elif compound == 'Chlorophyll':
+                score = 1 if 2.0 <= mean_conc <= 3.0 else 0.5
+            elif compound == 'Anthocyanins':
+                score = 1 if 3.5 <= mean_conc <= 4.5 else 0.5
+            elif compound == 'Pectin':
+                score = 1 if 1.2 <= mean_conc <= 1.8 else 0.5
+            elif compound == 'Actinidin':
+                score = 1 if 0.8 <= mean_conc <= 1.2 else 0.5
+            elif compound == 'Fiber':
+                score = 1 if 1.8 <= mean_conc <= 2.4 else 0.5
+            health_scores.append(score)
+        overall_score = (sum(health_scores) / len(health_scores) * 100) if health_scores else 0
+        overall_assessment = {
+            "health_score": round(overall_score, 1),
+            "status": "Excellent - All chemical parameters are within optimal ranges" if overall_score >= 90 else \
+                     ("Good - Most chemical parameters are within optimal ranges" if overall_score >= 75 else \
+                     ("Fair - Some chemical parameters need attention" if overall_score >= 60 else \
+                     "Poor - Multiple chemical parameters need attention"))
+        }
+        # Generate recommendations
+        recommendations = []
+        for compound in tree_data['Chemical Compound'].unique():
+            compound_data = tree_data[tree_data['Chemical Compound'] == compound]
+            mean_conc = compound_data['Concentration'].mean()
+            if compound == 'Sugars' and not (2.5 <= mean_conc <= 4.0):
+                recommendations.append({
+                    "compound": compound,
+                    "issue": f"Sugar levels are {'low' if mean_conc < 2.5 else 'high'}",
+                    "recommendation": "Consider adjusting fertilization and irrigation."
+                })
+            elif compound == 'Malic Acid' and not (0.8 <= mean_conc <= 1.5):
+                recommendations.append({
+                    "compound": compound,
+                    "issue": f"Malic acid levels are {'low' if mean_conc < 0.8 else 'high'}",
+                    "recommendation": "Review fruit maturity and harvest timing."
+                })
+            elif compound == 'Vitamin C' and not (0.4 <= mean_conc <= 0.8):
+                recommendations.append({
+                    "compound": compound,
+                    "issue": f"Vitamin C levels are {'low' if mean_conc < 0.4 else 'high'}",
+                    "recommendation": "Check sunlight exposure and nutrient balance."
+                })
+            elif compound == 'Chlorophyll' and not (2.0 <= mean_conc <= 3.0):
+                recommendations.append({
+                    "compound": compound,
+                    "issue": f"Chlorophyll levels are {'low' if mean_conc < 2.0 else 'high'}",
+                    "recommendation": "Review leaf health and nutrient uptake."
+                })
+            elif compound == 'Anthocyanins' and not (3.5 <= mean_conc <= 4.5):
+                recommendations.append({
+                    "compound": compound,
+                    "issue": f"Anthocyanin levels are {'low' if mean_conc < 3.5 else 'high'}",
+                    "recommendation": "Check light exposure and temperature conditions."
+                })
+            elif compound == 'Pectin' and not (1.2 <= mean_conc <= 1.8):
+                recommendations.append({
+                    "compound": compound,
+                    "issue": f"Pectin levels are {'low' if mean_conc < 1.2 else 'high'}",
+                    "recommendation": "Review fruit development stage and harvest timing."
+                })
+            elif compound == 'Actinidin' and not (0.8 <= mean_conc <= 1.2):
+                recommendations.append({
+                    "compound": compound,
+                    "issue": f"Actinidin levels are {'low' if mean_conc < 0.8 else 'high'}",
+                    "recommendation": "Check fruit ripeness and storage conditions."
+                })
+            elif compound == 'Fiber' and not (1.8 <= mean_conc <= 2.4):
+                recommendations.append({
+                    "compound": compound,
+                    "issue": f"Fiber levels are {'low' if mean_conc < 1.8 else 'high'}",
+                    "recommendation": "Review fruit development and harvest timing."
+                })
+        return {
+            "tree_id": tree_id,
+            "tree_species": tree_species,
+            "chemical_compounds": chemical_compounds,
+            "environmental_factors": environmental_factors,
+            "overall_assessment": overall_assessment,
+            "recommendations": recommendations
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 # if __name__ == "__main__":
 #     uvicorn.run(app, host="0.0.0.0", port=8000) 
