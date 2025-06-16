@@ -1,19 +1,21 @@
 import pandas as pd
 
 class YieldAnalysisResult:
-    def __init__(self, yield_score, rating, details, limiting_factors, recommendations):
-        self.yield_score = yield_score
+    def __init__(self, rating, expected_yield, details, limiting_factors, fruit_quality, recommendations):
         self.rating = rating
+        self.expected_yield = expected_yield
         self.details = details
         self.limiting_factors = limiting_factors
+        self.fruit_quality = fruit_quality
         self.recommendations = recommendations
 
     def to_dict(self):
         return {
-            'yield_score': self.yield_score,
             'rating': self.rating,
+            'expected_yield': self.expected_yield,
             'details': self.details,
             'limiting_factors': self.limiting_factors,
+            'fruit_quality_prediction': self.fruit_quality,
             'recommendations': self.recommendations
         }
 
@@ -85,91 +87,137 @@ class YieldAnalyzer:
         if errors:
             return {'errors': errors}
 
-        # Scoring logic
-        score = 1.0
+        # Farmer-friendly rating logic
+        def to_rating(val):
+            if val >= 0.9:
+                return 'Excellent'
+            elif val >= 0.7:
+                return 'Good'
+            elif val >= 0.5:
+                return 'Average'
+            else:
+                return 'Poor'
+
+        # Parameter ratings
         details = {}
         limiting_factors = []
         recommendations = []
+        score = 1.0
 
         # Tree age
         if 3 <= tree_age <= 15:
-            details['tree_age'] = {'status': 'Optimal', 'score': 1.0}
+            details['tree_age'] = {'status': 'Optimal', 'rating': 'Excellent'}
+            age_factor = 1.0
         elif tree_age < 3:
-            details['tree_age'] = {'status': 'Young', 'score': 0.6}
+            details['tree_age'] = {'status': 'Young', 'rating': 'Average'}
             limiting_factors.append('Tree is too young for optimal yield.')
             recommendations.append('Focus on root development and proper pruning for young trees.')
+            age_factor = 0.6
             score *= 0.6
         else:
-            details['tree_age'] = {'status': 'Aging', 'score': 0.8}
+            details['tree_age'] = {'status': 'Aging', 'rating': 'Good'}
             limiting_factors.append('Tree is aging, yield may decline.')
             recommendations.append('Consider rejuvenation pruning or replacement for old trees.')
+            age_factor = 0.8
             score *= 0.8
 
         # Flower buds
         expected_buds = 100 if tree_age < 3 else 200 if tree_age < 10 else 150
         if flower_buds_count >= expected_buds:
-            details['flower_buds_count'] = {'status': 'Good', 'score': 1.0}
+            details['flower_buds_count'] = {'status': 'Good', 'rating': 'Excellent'}
+            bud_factor = 1.0
         elif flower_buds_count >= expected_buds * 0.5:
-            details['flower_buds_count'] = {'status': 'Moderate', 'score': 0.7}
+            details['flower_buds_count'] = {'status': 'Moderate', 'rating': 'Good'}
             limiting_factors.append('Moderate flower bud count may limit yield.')
             recommendations.append('Improve nutrition and management to increase bud count.')
+            bud_factor = 0.7
             score *= 0.7
         else:
-            details['flower_buds_count'] = {'status': 'Low', 'score': 0.4}
+            details['flower_buds_count'] = {'status': 'Low', 'rating': 'Poor'}
             limiting_factors.append('Low flower bud count is a major limiting factor.')
             recommendations.append('Review pruning and ensure proper winter chilling.')
+            bud_factor = 0.4
             score *= 0.4
 
         # Leaf color
         if leaf_color == 'Green':
-            details['leaf_color'] = {'status': 'Healthy', 'score': 1.0}
+            details['leaf_color'] = {'status': 'Healthy', 'rating': 'Excellent'}
+            leaf_factor = 1.0
         elif leaf_color == 'Yellow':
-            details['leaf_color'] = {'status': 'Deficiency/Stress', 'score': 0.6}
+            details['leaf_color'] = {'status': 'Deficiency/Stress', 'rating': 'Average'}
             limiting_factors.append('Yellow leaves indicate stress or deficiency.')
             recommendations.append('Check for nutrient deficiency or water stress.')
+            leaf_factor = 0.6
             score *= 0.6
         else:
-            details['leaf_color'] = {'status': 'Severe Stress/Disease', 'score': 0.3}
+            details['leaf_color'] = {'status': 'Severe Stress/Disease', 'rating': 'Poor'}
             limiting_factors.append('Brown leaves indicate severe stress or disease.')
             recommendations.append('Inspect for pests, diseases, or root issues.')
+            leaf_factor = 0.3
             score *= 0.3
 
         # Soil moisture
         if soil_moisture == 'Moderate':
-            details['soil_moisture'] = {'status': 'Optimal', 'score': 1.0}
+            details['soil_moisture'] = {'status': 'Optimal', 'rating': 'Excellent'}
+            moisture_factor = 1.0
         else:
-            details['soil_moisture'] = {'status': 'Sub-optimal', 'score': 0.7}
+            details['soil_moisture'] = {'status': 'Sub-optimal', 'rating': 'Good'}
             limiting_factors.append('Soil moisture is not optimal.')
             recommendations.append('Adjust irrigation to maintain moderate soil moisture.')
+            moisture_factor = 0.7
             score *= 0.7
 
         # Fertilizer
         if fertilizer_used:
-            details['fertilizer_used'] = {'status': 'Applied', 'score': 1.0}
+            details['fertilizer_used'] = {'status': 'Applied', 'rating': 'Excellent'}
+            fert_factor = 1.0
         else:
-            details['fertilizer_used'] = {'status': 'Not Applied', 'score': 0.5}
+            details['fertilizer_used'] = {'status': 'Not Applied', 'rating': 'Average'}
             limiting_factors.append('No fertilizer applied, possible nutrient deficiency.')
             recommendations.append('Apply balanced fertilizer as per recommendations.')
+            fert_factor = 0.5
             score *= 0.5
 
-        # Final yield score and rating
-        yield_score = round(score * 100, 1)
-        if yield_score >= 90:
-            rating = 'Excellent'
-        elif yield_score >= 70:
-            rating = 'Good'
-        elif yield_score >= 50:
-            rating = 'Average'
-        else:
-            rating = 'Poor'
+        # Final yield rating
+        yield_rating = to_rating(score)
+
+        # Expected yield range (farmer-friendly)
+        base_yield = {'minimum': 15, 'maximum': 30, 'expected': 22.5, 'unit': 'kg per tree'}
+        # Adjust for all factors
+        base = 1.0
+        for f in [age_factor, bud_factor, leaf_factor, moisture_factor, fert_factor]:
+            base *= f
+        base_yield = {
+            'minimum': round(15 * base, 1),
+            'maximum': round(30 * base, 1),
+            'expected': round(22.5 * base, 1),
+            'unit': 'kg per tree'
+        }
+
+        # Fruit quality prediction
+        fruit_quality = {
+            'size': 'Medium',
+            'color': 'Good',
+            'sweetness': 'Medium',
+            'firmness': 'Good',
+            'overall_quality': 'Good'
+        }
+        if leaf_color != 'Green' or soil_moisture != 'Moderate':
+            fruit_quality['color'] = 'Fair'
+            fruit_quality['overall_quality'] = 'Fair'
+        if not fertilizer_used:
+            fruit_quality['size'] = 'Small'
+            fruit_quality['sweetness'] = 'Low'
+            fruit_quality['overall_quality'] = 'Poor'
 
         if not recommendations:
             recommendations.append('Maintain current practices and monitor regularly.')
 
         return YieldAnalysisResult(
-            yield_score=yield_score,
-            rating=rating,
+            rating=yield_rating,
+            expected_yield=base_yield,
             details=details,
             limiting_factors=limiting_factors,
+            fruit_quality=fruit_quality,
             recommendations=recommendations
         ).to_dict()
