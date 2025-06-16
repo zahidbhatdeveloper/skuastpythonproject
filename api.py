@@ -12,6 +12,11 @@ import io
 import traceback
 import logging
 from datetime import datetime
+import joblib
+from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score, r2_score
+import numpy as np
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -36,6 +41,9 @@ app.add_middleware(
 chemical_analyzer = FruitTreeAnalyzer()
 yield_analyzer = TreeYieldAnalyzer()
 disease_analyzer = TreeDiseaseAnalyzer()
+
+MODEL_PATH_YIELD = 'data/yield_model.joblib'
+MODEL_PATH_HEALTH = 'data/health_model.joblib'
 
 class TreeAnalysisResponse(BaseModel):
     tree_id: str
@@ -338,11 +346,44 @@ async def detect_tree_disease(tree_id: str, image: UploadFile = File(...)):
         logger.error(f"Traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/tree/data", response_model=TreeDataResponse)
+@app.post("/train-model")
+def train_model():
+    import pandas as pd
+    df = pd.read_csv('data/training_data.csv')
+    # Prepare features and targets
+    feature_cols = ['Concentration', 'Dosage', 'Tree Age (years)', 'pH Level']
+    # For simplicity, use mean of each compound per tree per measurement
+    X = df.groupby(['Tree ID', 'Measurement Date']).agg({
+        'Concentration': 'mean',
+        'Dosage': 'mean',
+        'Tree Age (years)': 'first',
+        'pH Level': 'first',
+        'Yield (kg)': 'first',
+        'Health Status': 'first'
+    }).reset_index()
+    y_yield = X['Yield (kg)']
+    y_health = X['Health Status']
+    X_features = X[feature_cols]
+    # Encode health status
+    from sklearn.preprocessing import LabelEncoder
+    le = LabelEncoder()
+    y_health_enc = le.fit_transform(y_health)
+    # Train yield regressor
+    rf_yield = RandomForestRegressor(n_estimators=100, random_state=42)
+    rf_yield.fit(X_features, y_yield)
+    # Train health classifier
+    rf_health = RandomForestClassifier(n_estimators=100, random_state=42)
+    rf_health.fit(X_features, y_health_enc)
+    # Save models and label encoder
+    joblib.dump(rf_yield, MODEL_PATH_YIELD)
+    joblib.dump(rf_health, MODEL_PATH_HEALTH)
+    joblib.dump(le, 'data/health_label_encoder.joblib')
+    return {'message': 'Models trained and saved successfully.'}
+
+@app.post("/tree/data")
 async def analyze_tree_data(tree_data: TreeData):
     try:
         import pandas as pd
-        # Use current date/time as measurement date
         measurement_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         records = []
         for measurement in tree_data.measurements:
@@ -362,134 +403,54 @@ async def analyze_tree_data(tree_data: TreeData):
             }
             records.append(record)
         df = pd.DataFrame(records)
-
-        # Calculate percentage composition
-        chemical_means = df.groupby('Chemical Compound')['Concentration'].mean()
-        total_concentration = chemical_means.sum()
-        composition_percent = (chemical_means / total_concentration * 100).round(2)
-
-        # Detailed chemical analysis
-        chemical_analysis = []
-        for compound in df['Chemical Compound'].unique():
-            compound_data = df[df['Chemical Compound'] == compound]
-            mean_conc = compound_data['Concentration'].mean()
-            min_conc = compound_data['Concentration'].min()
-            max_conc = compound_data['Concentration'].max()
-            std_dev = compound_data['Concentration'].std()
-            median = compound_data['Concentration'].median()
-            mean_dosage = compound_data['Dosage'].mean()
-            percentage = f"{composition_percent[compound]}%" if compound in composition_percent else None
-            optimal_range = "N/A"
-            status = "N/A"
-            if compound == 'Sugars':
-                optimal_range = "2.5 - 4.0"
-                status = "Optimal" if 2.5 <= mean_conc <= 4.0 else "Sub-optimal"
-            elif compound == 'Malic Acid':
-                optimal_range = "0.8 - 1.5"
-                status = "Optimal" if 0.8 <= mean_conc <= 1.5 else "Sub-optimal"
-            elif compound == 'Vitamin C':
-                optimal_range = "0.4 - 0.8"
-                status = "Optimal" if 0.4 <= mean_conc <= 0.8 else "Sub-optimal"
-            elif compound == 'Chlorophyll':
-                optimal_range = "2.0 - 3.0"
-                status = "Optimal" if 2.0 <= mean_conc <= 3.0 else "Sub-optimal"
-            elif compound == 'Anthocyanins':
-                optimal_range = "3.5 - 4.5"
-                status = "Optimal" if 3.5 <= mean_conc <= 4.5 else "Sub-optimal"
-            elif compound == 'Pectin':
-                optimal_range = "1.2 - 1.8"
-                status = "Optimal" if 1.2 <= mean_conc <= 1.8 else "Sub-optimal"
-            elif compound == 'Actinidin':
-                optimal_range = "0.8 - 1.2"
-                status = "Optimal" if 0.8 <= mean_conc <= 1.2 else "Sub-optimal"
-            elif compound == 'Fiber':
-                optimal_range = "1.8 - 2.4"
-                status = "Optimal" if 1.8 <= mean_conc <= 2.4 else "Sub-optimal"
-            chemical_analysis.append({
-                "compound": compound,
-                "mean_concentration": round(mean_conc, 3),
-                "min": round(min_conc, 3),
-                "max": round(max_conc, 3),
-                "std": round(std_dev, 3) if std_dev is not None else None,
-                "median": round(median, 3),
-                "mean_dosage": round(mean_dosage, 3),
-                "percentage": percentage,
-                "optimal_range": optimal_range,
-                "status": status
-            })
-
-        # Environmental factors
-        environmental_factors = {
-            "pH_level": {
-                "mean": tree_data.ph_level,
-                "optimal_range": "6.0 - 7.0",
-                "status": "Optimal" if 6.0 <= tree_data.ph_level <= 7.0 else "Sub-optimal"
-            },
-            "tree_age": {
-                "years": tree_data.tree_age,
-                "growth_stage": "Mature" if tree_data.tree_age > 5 else "Young"
-            },
-            "soil_type": tree_data.soil_type,
-            "fruit_stage": tree_data.fruit_stage
-        }
-
-        # Recommendations
-        recommendations = []
-        for chem in chemical_analysis:
-            if chem["status"] == "Sub-optimal":
-                recommendations.append({
-                    "compound": chem["compound"],
-                    "issue": f"{chem['compound']} levels are out of optimal range.",
-                    "recommendation": "Please review management practices."
-                })
-
-        # Overall health score
-        health_scores = []
-        for chem in chemical_analysis:
-            mean_conc = chem["mean_concentration"]
-            compound = chem["compound"]
-            score = 1
-            if compound == 'Sugars':
-                score = 1 if 2.5 <= mean_conc <= 4.0 else 0.5
-            elif compound == 'Malic Acid':
-                score = 1 if 0.8 <= mean_conc <= 1.5 else 0.5
-            elif compound == 'Vitamin C':
-                score = 1 if 0.4 <= mean_conc <= 0.8 else 0.5
-            elif compound == 'Chlorophyll':
-                score = 1 if 2.0 <= mean_conc <= 3.0 else 0.5
-            elif compound == 'Anthocyanins':
-                score = 1 if 3.5 <= mean_conc <= 4.5 else 0.5
-            elif compound == 'Pectin':
-                score = 1 if 1.2 <= mean_conc <= 1.8 else 0.5
-            elif compound == 'Actinidin':
-                score = 1 if 0.8 <= mean_conc <= 1.2 else 0.5
-            elif compound == 'Fiber':
-                score = 1 if 1.8 <= mean_conc <= 2.4 else 0.5
-            health_scores.append(score)
-        overall_score = (sum(health_scores) / len(health_scores) * 100) if health_scores else 0
-        overall_health = {
-            "score": round(overall_score, 1),
-            "status": "Excellent - All chemical parameters are within optimal ranges" if overall_score >= 90 else \
-                     ("Good - Most chemical parameters are within optimal ranges" if overall_score >= 75 else \
-                     ("Fair - Some chemical parameters need attention" if overall_score >= 60 else \
-                     "Poor - Multiple chemical parameters need attention"))
-        }
-
-        # Return broad, detailed response
+        # Aggregate features for prediction
+        X_pred = pd.DataFrame({
+            'Concentration': [df['Concentration'].mean()],
+            'Dosage': [df['Dosage'].mean()],
+            'Tree Age (years)': [tree_data.tree_age],
+            'pH Level': [tree_data.ph_level]
+        })
+        # Load models
+        rf_yield = joblib.load(MODEL_PATH_YIELD)
+        rf_health = joblib.load(MODEL_PATH_HEALTH)
+        le = joblib.load('data/health_label_encoder.joblib')
+        # Predict
+        pred_yield = rf_yield.predict(X_pred)[0]
+        pred_health_idx = rf_health.predict(X_pred)[0]
+        pred_health = le.inverse_transform([pred_health_idx])[0]
+        # Feature importances
+        feat_imp_yield = dict(zip(X_pred.columns, rf_yield.feature_importances_))
+        feat_imp_health = dict(zip(X_pred.columns, rf_health.feature_importances_))
+        # Confidence (std of trees for yield, proba for health)
+        if hasattr(rf_yield, 'estimators_'):
+            preds = np.array([est.predict(X_pred)[0] for est in rf_yield.estimators_])
+            yield_conf = float(np.std(preds))
+        else:
+            yield_conf = None
+        if hasattr(rf_health, 'predict_proba'):
+            proba = rf_health.predict_proba(X_pred)[0]
+            health_conf = float(np.max(proba))
+        else:
+            health_conf = None
+        # Build detailed response
         return {
             "tree_id": tree_data.tree_id,
             "tree_species": tree_data.tree_species,
-            "location": tree_data.location,
-            "season": tree_data.season,
-            "tree_age": tree_data.tree_age,
-            "ph_level": tree_data.ph_level,
-            "soil_type": tree_data.soil_type,
-            "fruit_stage": tree_data.fruit_stage,
-            "measurement_date": measurement_date,
-            "chemical_analysis": chemical_analysis,
-            "environmental_factors": environmental_factors,
-            "overall_health": overall_health,
-            "recommendations": recommendations
+            "input_summary": {
+                "location": tree_data.location,
+                "season": tree_data.season,
+                "tree_age": tree_data.tree_age,
+                "ph_level": tree_data.ph_level,
+                "soil_type": tree_data.soil_type,
+                "fruit_stage": tree_data.fruit_stage,
+                "compounds": [m.dict() for m in tree_data.measurements]
+            },
+            "predicted_yield_kg": round(pred_yield, 2),
+            "yield_confidence": yield_conf,
+            "predicted_health_status": pred_health,
+            "health_confidence": health_conf,
+            "feature_importance_yield": feat_imp_yield,
+            "feature_importance_health": feat_imp_health
         }
     except Exception as e:
         logger.error(f"Error in tree data analysis: {str(e)}")
