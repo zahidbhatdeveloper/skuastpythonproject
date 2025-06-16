@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException, UploadFile, File, Body, Query, Request, Form
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional
 import uvicorn
 from tree_chemical_analysis import FruitTreeAnalyzer
 from tree_yield_analysis import TreeYieldAnalyzer
@@ -76,21 +76,6 @@ class ChemicalAnalysisRequest(BaseModel):
     pH_Level: float
     Soil_Type: str
     Fruit_Stage: str
-
-class TreeHealthPredictionRequest(BaseModel):
-    tree_id: str
-    chemical_compounds: Dict[str, float]
-    environmental_factors: Dict[str, float]
-    previous_dosage: Optional[float] = None
-
-class TreeHealthPredictionResponse(BaseModel):
-    tree_id: str
-    health_score: float
-    status: str
-    compound_analysis: Dict[str, Dict[str, Any]]
-    environmental_impact: Dict[str, Dict[str, Any]]
-    recommendations: List[Dict[str, str]]
-    dosage_analysis: Optional[Dict[str, Any]] = None
 
 @app.get("/")
 async def root():
@@ -571,22 +556,6 @@ async def analyze_chemical(request: Request, tree_id: str = Query(None), data: s
             "overall_assessment": overall_assessment,
             "recommendations": recommendations
         }
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-@app.post("/predict/health", response_model=TreeHealthPredictionResponse)
-async def predict_tree_health(request: TreeHealthPredictionRequest):
-    """
-    Predict tree health based on four key input fields:
-    1. tree_id: Identifier for the tree
-    2. chemical_compounds: Dictionary of chemical measurements
-    3. environmental_factors: Dictionary of environmental measurements
-    4. previous_dosage: Optional previous treatment dosage
-    """
-    try:
-        analyzer = FruitTreeAnalyzer()
-        results = analyzer.predict_tree_health(request.dict())
-        return results
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
