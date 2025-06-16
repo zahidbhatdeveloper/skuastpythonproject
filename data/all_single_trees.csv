@@ -1,4 +1,4 @@
-Tree ID,Tree Species,Chemical Compound,Concentration,Dosage,Measurement Date,Location,Season,Tree Age (years),pH Level,Soil Type,Fruit Stage
+Tree ID,Tree Species,Chemical Compound,Concentration,Previous Dosage,Measurement Date,Location,Season,Tree Age (years),pH Level,Soil Type,Fruit Stage
 A001,Apple,Sugars,300.1,280.5,2024-04-01,SKUAST Orchard A,Spring,9,6.4,Loamy,Fruiting
 A001,Apple,Malic Acid,1.3,1.1,2024-04-01,SKUAST Orchard A,Spring,9,6.4,Loamy,Fruiting
 A001,Apple,Vitamin C,0.5,0.4,2024-04-01,SKUAST Orchard A,Spring,9,6.4,Loamy,Fruiting

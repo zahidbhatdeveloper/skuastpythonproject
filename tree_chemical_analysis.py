@@ -66,7 +66,7 @@ class FruitTreeAnalyzer:
         # Calculate basic statistics
         stats_summary = species_data.groupby('Chemical Compound').agg({
             'Concentration': ['mean', 'std', 'min', 'max', 'median'],
-            'Dosage': ['mean', 'std', 'min', 'max', 'median']
+            'Previous Dosage': ['mean', 'std', 'min', 'max', 'median']
         }).round(3)
         
         # Print detailed analysis tables
@@ -96,9 +96,9 @@ class FruitTreeAnalyzer:
             std_dev = compound_data['Concentration'].std()
             cv = (std_dev / mean_conc * 100) if mean_conc != 0 and not np.isnan(std_dev) else float('nan')
             
-            # Get dosage information
-            dosage_mean = compound_data['Dosage'].mean()
-            dosage_std = compound_data['Dosage'].std()
+            # Get previous dosage information
+            prev_dosage_mean = compound_data['Previous Dosage'].mean()
+            prev_dosage_std = compound_data['Previous Dosage'].std()
             
             # Define optimal ranges based on compound type
             optimal_range = "N/A"
@@ -134,15 +134,15 @@ class FruitTreeAnalyzer:
                 f"{min_conc:.3f} - {max_conc:.3f}",
                 f"{std_dev:.3f}" if not np.isnan(std_dev) else "NaN",
                 f"{cv:.1f}%" if not np.isnan(cv) else "NaN",
-                f"{dosage_mean:.3f}",
-                f"{dosage_std:.3f}",
+                f"{prev_dosage_mean:.3f}",
+                f"{prev_dosage_std:.3f}",
                 optimal_range,
                 status
             ])
         
         chem_detail_table = tabulate(
             chemical_compound_data,
-            headers=["Compound", "Avg Conc", "Range", "Std Dev", "CV%", "Dosage Avg", "Dosage Std", "Optimal Range", "Status"],
+            headers=["Compound", "Avg Conc", "Range", "Std Dev", "CV%", "Prev Dosage Avg", "Prev Dosage Std", "Optimal Range", "Status"],
             tablefmt='grid'
         )
         print(chem_detail_table)
@@ -817,9 +817,9 @@ class FruitTreeAnalyzer:
             std_dev = compound_data['Concentration'].std()
             cv = (std_dev / mean_conc * 100) if mean_conc != 0 and not np.isnan(std_dev) else float('nan')
             
-            # Get dosage information
-            dosage_mean = compound_data['Dosage'].mean()
-            dosage_std = compound_data['Dosage'].std()
+            # Get previous dosage information
+            prev_dosage_mean = compound_data['Previous Dosage'].mean()
+            prev_dosage_std = compound_data['Previous Dosage'].std()
             
             # Define optimal ranges based on compound type
             optimal_range = "N/A"
@@ -855,15 +855,15 @@ class FruitTreeAnalyzer:
                 f"{min_conc:.3f} - {max_conc:.3f}",
                 f"{std_dev:.3f}" if not np.isnan(std_dev) else "NaN",
                 f"{cv:.1f}%" if not np.isnan(cv) else "NaN",
-                f"{dosage_mean:.3f}",
-                f"{dosage_std:.3f}",
+                f"{prev_dosage_mean:.3f}",
+                f"{prev_dosage_std:.3f}",
                 optimal_range,
                 status
             ])
         
         chem_detail_table_html = tabulate(
             chemical_compound_data,
-            headers=["Compound", "Avg Conc", "Range", "Std Dev", "CV%", "Dosage Avg", "Dosage Std", "Optimal Range", "Status"],
+            headers=["Compound", "Avg Conc", "Range", "Std Dev", "CV%", "Prev Dosage Avg", "Prev Dosage Std", "Optimal Range", "Status"],
             tablefmt="html"
         )
         report_html += f"""

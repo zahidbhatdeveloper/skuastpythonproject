@@ -11,12 +11,6 @@ import json
 import io
 import traceback
 import logging
-from datetime import datetime
-import joblib
-from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score, r2_score
-import numpy as np
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -41,9 +35,6 @@ app.add_middleware(
 chemical_analyzer = FruitTreeAnalyzer()
 yield_analyzer = TreeYieldAnalyzer()
 disease_analyzer = TreeDiseaseAnalyzer()
-
-MODEL_PATH_YIELD = 'data/yield_model.joblib'
-MODEL_PATH_HEALTH = 'data/health_model.joblib'
 
 class TreeAnalysisResponse(BaseModel):
     tree_id: str
@@ -71,30 +62,6 @@ class DiseaseAnalysisResponse(BaseModel):
     color_analysis: Dict
     texture_analysis: Dict
     recommendations: List[Dict]
-
-# New Pydantic models for single tree data
-class ChemicalMeasurement(BaseModel):
-    chemical_compound: str
-    concentration: float
-    dosage: float
-
-class TreeData(BaseModel):
-    tree_id: str
-    tree_species: str
-    measurements: List[ChemicalMeasurement]
-    location: str
-    season: str
-    tree_age: float
-    ph_level: float
-    soil_type: str
-    fruit_stage: str
-
-class TreeDataResponse(BaseModel):
-    tree_id: str
-    tree_species: str
-    analysis_results: Dict
-    recommendations: List[Dict]
-    status: str
 
 @app.get("/")
 async def root():
@@ -346,119 +313,7 @@ async def detect_tree_disease(tree_id: str, image: UploadFile = File(...)):
         logger.error(f"Traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post('/train-model')
-def train_model(file: UploadFile = File(...)):
-    import pandas as pd
-    contents = file.file.read()
-    df = pd.read_csv(pd.io.common.BytesIO(contents))
-    # Prepare features and targets
-    feature_cols = ['Concentration', 'Dosage', 'Tree Age (years)', 'pH Level']
-    # For simplicity, use mean of each compound per tree per measurement
-    X = df.groupby(['Tree ID', 'Measurement Date']).agg({
-        'Concentration': 'mean',
-        'Dosage': 'mean',
-        'Tree Age (years)': 'first',
-        'pH Level': 'first',
-        'Yield (kg)': 'first',
-        'Health Status': 'first'
-    }).reset_index()
-    y_yield = X['Yield (kg)']
-    y_health = X['Health Status']
-    X_features = X[feature_cols]
-    # Encode health status
-    from sklearn.preprocessing import LabelEncoder
-    le = LabelEncoder()
-    y_health_enc = le.fit_transform(y_health)
-    # Train yield regressor
-    rf_yield = RandomForestRegressor(n_estimators=100, random_state=42)
-    rf_yield.fit(X_features, y_yield)
-    # Train health classifier
-    rf_health = RandomForestClassifier(n_estimators=100, random_state=42)
-    rf_health.fit(X_features, y_health_enc)
-    # Save models and label encoder
-    joblib.dump(rf_yield, MODEL_PATH_YIELD)
-    joblib.dump(rf_health, MODEL_PATH_HEALTH)
-    joblib.dump(le, 'data/health_label_encoder.joblib')
-    return {'message': 'Models trained and saved successfully.'}
-
-@app.post("/tree/data")
-async def analyze_tree_data(tree_data: TreeData):
-    try:
-        import pandas as pd
-        measurement_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        records = []
-        for measurement in tree_data.measurements:
-            record = {
-                'Tree ID': tree_data.tree_id,
-                'Tree Species': tree_data.tree_species,
-                'Chemical Compound': measurement.chemical_compound,
-                'Concentration': measurement.concentration,
-                'Dosage': measurement.dosage,
-                'Measurement Date': measurement_date,
-                'Location': tree_data.location,
-                'Season': tree_data.season,
-                'Tree Age (years)': tree_data.tree_age,
-                'pH Level': tree_data.ph_level,
-                'Soil Type': tree_data.soil_type,
-                'Fruit Stage': tree_data.fruit_stage
-            }
-            records.append(record)
-        df = pd.DataFrame(records)
-        # Aggregate features for prediction
-        X_pred = pd.DataFrame({
-            'Concentration': [df['Concentration'].mean()],
-            'Dosage': [df['Dosage'].mean()],
-            'Tree Age (years)': [tree_data.tree_age],
-            'pH Level': [tree_data.ph_level]
-        })
-        # Load models
-        rf_yield = joblib.load(MODEL_PATH_YIELD)
-        rf_health = joblib.load(MODEL_PATH_HEALTH)
-        le = joblib.load('data/health_label_encoder.joblib')
-        # Predict
-        pred_yield = rf_yield.predict(X_pred)[0]
-        pred_health_idx = rf_health.predict(X_pred)[0]
-        pred_health = le.inverse_transform([pred_health_idx])[0]
-        # Feature importances
-        feat_imp_yield = dict(zip(X_pred.columns, rf_yield.feature_importances_))
-        feat_imp_health = dict(zip(X_pred.columns, rf_health.feature_importances_))
-        # Confidence (std of trees for yield, proba for health)
-        if hasattr(rf_yield, 'estimators_'):
-            preds = np.array([est.predict(X_pred)[0] for est in rf_yield.estimators_])
-            yield_conf = float(np.std(preds))
-        else:
-            yield_conf = None
-        if hasattr(rf_health, 'predict_proba'):
-            proba = rf_health.predict_proba(X_pred)[0]
-            health_conf = float(np.max(proba))
-        else:
-            health_conf = None
-        # Build detailed response
-        return {
-            "tree_id": tree_data.tree_id,
-            "tree_species": tree_data.tree_species,
-            "input_summary": {
-                "location": tree_data.location,
-                "season": tree_data.season,
-                "tree_age": tree_data.tree_age,
-                "ph_level": tree_data.ph_level,
-                "soil_type": tree_data.soil_type,
-                "fruit_stage": tree_data.fruit_stage,
-                "compounds": [m.dict() for m in tree_data.measurements]
-            },
-            "predicted_yield_kg": round(pred_yield, 2),
-            "yield_confidence": yield_conf,
-            "predicted_health_status": pred_health,
-            "health_confidence": health_conf,
-            "feature_importance_yield": feat_imp_yield,
-            "feature_importance_health": feat_imp_health
-        }
-    except Exception as e:
-        logger.error(f"Error in tree data analysis: {str(e)}")
-        logger.error(f"Traceback: {traceback.format_exc()}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-#  if __name__ == "__main__":
+# if __name__ == "__main__":
 #     uvicorn.run(app, host="0.0.0.0", port=8000) 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=10000)
