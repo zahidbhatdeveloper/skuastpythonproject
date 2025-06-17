@@ -9,7 +9,6 @@ import json
 import io
 import traceback
 import logging
-import os
 from yield_analysis import YieldAnalyzer
 from chemical_analysis import ChemicalAnalyzer
 from ml_predictor import MLPredictor
@@ -38,10 +37,6 @@ chemical_analyzer = ChemicalAnalyzer()
 yield_analyzer = YieldAnalyzer()
 disease_analyzer = TreeDiseaseAnalyzer()
 ml_predictor = MLPredictor()
-
-# Create necessary directories
-os.makedirs('models', exist_ok=True)
-os.makedirs('data', exist_ok=True)
 
 class TreeAnalysisResponse(BaseModel):
     tree_id: str
@@ -96,7 +91,7 @@ class YieldAnalysisRequest(BaseModel):
 
 @app.get("/")
 def root():
-    return {"message": "Welcome to the SKUAST Tree Analysis API", "status": "healthy"}
+    return {"message": "Welcome to the new SKUAST Tree Analysis API"}
 
 @app.post("/load-data")
 async def load_data(file: UploadFile = File(...)):
@@ -486,6 +481,7 @@ async def analyze_yield(
         logger.error(f"Error in yield analysis: {str(e)}")
         raise HTTPException(status_code=400, detail=str(e))
 
+# if __name__ == "__main__":
+#     uvicorn.run(app, host="0.0.0.0", port=8000) 
 if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 10000))
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    app.run(host='0.0.0.0', port=10000)
