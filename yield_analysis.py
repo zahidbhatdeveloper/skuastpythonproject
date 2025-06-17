@@ -1,4 +1,6 @@
 import pandas as pd
+import numpy as np
+from ml_predictor import MLPredictor
 
 class YieldAnalysisResult:
     def __init__(self, rating, expected_yield, details, limiting_factors, fruit_quality, recommendations):
@@ -25,17 +27,243 @@ class YieldAnalyzer:
 
     def __init__(self):
         self.data = None
+        self.ml_predictor = MLPredictor()
         self.data_dir = 'data'
 
     def load_data(self, file_path):
-        """Load yield data from CSV file"""
-        try:
+        """Load yield analysis data"""
+        if isinstance(file_path, str):
             self.data = pd.read_csv(file_path)
-            print(f"Yield data loaded successfully with {len(self.data)} records")
-            return True
+        else:
+            self.data = pd.read_csv(file_path)
+
+    def analyze(self, tree_age, flower_buds_count, leaf_color, soil_moisture, fertilizer_used):
+        """Analyze yield parameters using ML model"""
+        try:
+            # Prepare input data
+            input_data = {
+                'tree_age': float(tree_age),
+                'flower_buds_count': int(flower_buds_count),
+                'leaf_color': leaf_color,
+                'soil_moisture': soil_moisture,
+                'fertilizer_used': fertilizer_used
+            }
+            
+            # Get ML prediction
+            ml_result = self.ml_predictor.predict_yield(input_data)
+            
+            # Calculate yield metrics based on ML prediction
+            expected_yield = ml_result['prediction']
+            feature_importance = ml_result['feature_importance']
+            
+            # Calculate yield range based on feature importance
+            yield_range = self._calculate_yield_range(expected_yield, feature_importance)
+            
+            # Generate quality predictions
+            quality_prediction = self._predict_quality(input_data, feature_importance)
+            
+            # Generate recommendations
+            recommendations = self._generate_recommendations(input_data, feature_importance, expected_yield)
+            
+            return {
+                'rating': self._get_yield_rating(expected_yield),
+                'expected_yield': {
+                    'minimum': round(yield_range['min'], 1),
+                    'maximum': round(yield_range['max'], 1),
+                    'expected': round(expected_yield, 1),
+                    'unit': 'kg per tree'
+                },
+                'details': {
+                    'tree_age': self._get_age_status(tree_age),
+                    'flower_buds_count': self._get_buds_status(flower_buds_count),
+                    'leaf_color': self._get_leaf_status(leaf_color),
+                    'soil_moisture': self._get_moisture_status(soil_moisture),
+                    'fertilizer_used': self._get_fertilizer_status(fertilizer_used)
+                },
+                'limiting_factors': self._identify_limiting_factors(input_data, feature_importance),
+                'fruit_quality_prediction': quality_prediction,
+                'recommendations': recommendations
+            }
+            
         except Exception as e:
-            print(f"Error loading data: {str(e)}")
-            return False
+            return {"errors": str(e)}
+
+    def _calculate_yield_range(self, expected_yield, feature_importance):
+        """Calculate yield range based on expected yield and feature importance"""
+        # Calculate uncertainty based on feature importance
+        total_importance = sum(feature_importance.values())
+        uncertainty = (1 - total_importance) * 0.2  # 20% maximum uncertainty
+        
+        return {
+            'min': expected_yield * (1 - uncertainty),
+            'max': expected_yield * (1 + uncertainty)
+        }
+
+    def _predict_quality(self, input_data, feature_importance):
+        """Predict fruit quality based on input parameters and feature importance"""
+        # Calculate quality scores for each aspect
+        size_score = self._calculate_quality_score('size', input_data, feature_importance)
+        color_score = self._calculate_quality_score('color', input_data, feature_importance)
+        sweetness_score = self._calculate_quality_score('sweetness', input_data, feature_importance)
+        firmness_score = self._calculate_quality_score('firmness', input_data, feature_importance)
+        
+        # Calculate overall quality
+        overall_score = (size_score + color_score + sweetness_score + firmness_score) / 4
+        
+        return {
+            'size': self._get_quality_rating(size_score),
+            'color': self._get_quality_rating(color_score),
+            'sweetness': self._get_quality_rating(sweetness_score),
+            'firmness': self._get_quality_rating(firmness_score),
+            'overall_quality': self._get_quality_rating(overall_score)
+        }
+
+    def _calculate_quality_score(self, aspect, input_data, feature_importance):
+        """Calculate quality score for a specific aspect"""
+        base_score = 7.0  # Base score on a 0-10 scale
+        
+        # Adjust based on input parameters
+        if aspect == 'size':
+            if input_data['soil_moisture'] == 'Moderate':
+                base_score += 1
+            if input_data['fertilizer_used']:
+                base_score += 0.5
+        elif aspect == 'color':
+            if input_data['leaf_color'] == 'Green':
+                base_score += 1
+        elif aspect == 'sweetness':
+            if input_data['soil_moisture'] == 'Moderate':
+                base_score += 0.5
+            if input_data['fertilizer_used']:
+                base_score += 0.5
+        elif aspect == 'firmness':
+            if 3 <= input_data['tree_age'] <= 15:
+                base_score += 0.5
+            if input_data['fertilizer_used']:
+                base_score += 0.5
+        
+        # Adjust based on feature importance
+        importance_factor = sum(feature_importance.values()) / len(feature_importance)
+        base_score *= (0.8 + 0.4 * importance_factor)
+        
+        return min(max(base_score, 0), 10)
+
+    def _get_quality_rating(self, score):
+        """Convert quality score to rating"""
+        if score >= 8.5:
+            return "Excellent"
+        elif score >= 7.0:
+            return "Good"
+        elif score >= 5.0:
+            return "Fair"
+        else:
+            return "Poor"
+
+    def _get_yield_rating(self, expected_yield):
+        """Get yield rating based on expected yield"""
+        if expected_yield >= 20:
+            return "Excellent"
+        elif expected_yield >= 15:
+            return "Good"
+        elif expected_yield >= 10:
+            return "Average"
+        else:
+            return "Poor"
+
+    def _get_age_status(self, age):
+        """Get tree age status"""
+        if 3 <= age <= 15:
+            return {"status": "Optimal", "rating": "Excellent"}
+        elif age < 3:
+            return {"status": "Young", "rating": "Average"}
+        else:
+            return {"status": "Aging", "rating": "Good"}
+
+    def _get_buds_status(self, count):
+        """Get flower buds status"""
+        if count >= 150:
+            return {"status": "High", "rating": "Excellent"}
+        elif count >= 100:
+            return {"status": "Moderate", "rating": "Good"}
+        else:
+            return {"status": "Low", "rating": "Average"}
+
+    def _get_leaf_status(self, color):
+        """Get leaf color status"""
+        if color == "Green":
+            return {"status": "Healthy", "rating": "Excellent"}
+        elif color == "Yellow":
+            return {"status": "Deficiency/Stress", "rating": "Average"}
+        else:
+            return {"status": "Unhealthy", "rating": "Poor"}
+
+    def _get_moisture_status(self, moisture):
+        """Get soil moisture status"""
+        if moisture == "Moderate":
+            return {"status": "Optimal", "rating": "Excellent"}
+        elif moisture == "Wet":
+            return {"status": "High", "rating": "Good"}
+        else:
+            return {"status": "Low", "rating": "Average"}
+
+    def _get_fertilizer_status(self, used):
+        """Get fertilizer status"""
+        if used:
+            return {"status": "Applied", "rating": "Excellent"}
+        else:
+            return {"status": "Not Applied", "rating": "Average"}
+
+    def _identify_limiting_factors(self, input_data, feature_importance):
+        """Identify limiting factors based on input data and feature importance"""
+        limiting_factors = []
+        
+        # Check each parameter
+        if input_data['tree_age'] < 3:
+            limiting_factors.append("Young tree age may limit yield.")
+        elif input_data['tree_age'] > 15:
+            limiting_factors.append("Aging tree may affect yield.")
+            
+        if input_data['flower_buds_count'] < 100:
+            limiting_factors.append("Low flower bud count may limit yield.")
+            
+        if input_data['leaf_color'] != "Green":
+            limiting_factors.append("Leaf color indicates stress or deficiency.")
+            
+        if input_data['soil_moisture'] != "Moderate":
+            limiting_factors.append("Soil moisture is not optimal.")
+            
+        if not input_data['fertilizer_used']:
+            limiting_factors.append("No fertilizer application may limit yield.")
+        
+        return limiting_factors
+
+    def _generate_recommendations(self, input_data, feature_importance, expected_yield):
+        """Generate recommendations based on input data and feature importance"""
+        recommendations = []
+        
+        # Tree age recommendations
+        if input_data['tree_age'] < 3:
+            recommendations.append("Provide additional care for young tree development.")
+        elif input_data['tree_age'] > 15:
+            recommendations.append("Consider rejuvenation pruning for aging tree.")
+        
+        # Flower buds recommendations
+        if input_data['flower_buds_count'] < 100:
+            recommendations.append("Improve nutrition and management to increase bud count.")
+        
+        # Leaf color recommendations
+        if input_data['leaf_color'] != "Green":
+            recommendations.append("Check for nutrient deficiency or water stress.")
+        
+        # Soil moisture recommendations
+        if input_data['soil_moisture'] != "Moderate":
+            recommendations.append("Adjust irrigation to maintain moderate soil moisture.")
+        
+        # Fertilizer recommendations
+        if not input_data['fertilizer_used']:
+            recommendations.append("Consider applying appropriate fertilizer.")
+        
+        return recommendations
 
     def analyze_tree_maturity(self, tree_age):
         status = "Mature"
@@ -71,154 +299,3 @@ class YieldAnalyzer:
     def analyze_nutrient_status(self, fertilizer_used):
         # Implementation of analyze_nutrient_status method
         pass
-
-    def analyze(self, tree_age, flower_buds_count, leaf_color, soil_moisture, fertilizer_used):
-        errors = []
-        if not isinstance(tree_age, (int, float)) or tree_age < 0:
-            errors.append('tree_age must be a non-negative number')
-        if not isinstance(flower_buds_count, int) or flower_buds_count < 0:
-            errors.append('flower_buds_count must be a non-negative integer')
-        if leaf_color not in self.LEAF_COLORS:
-            errors.append(f'Invalid leaf_color: {leaf_color}')
-        if soil_moisture not in self.SOIL_MOISTURE:
-            errors.append(f'Invalid soil_moisture: {soil_moisture}')
-        if not isinstance(fertilizer_used, bool):
-            errors.append('fertilizer_used must be a boolean')
-        if errors:
-            return {'errors': errors}
-
-        # Farmer-friendly rating logic
-        def to_rating(val):
-            if val >= 0.9:
-                return 'Excellent'
-            elif val >= 0.7:
-                return 'Good'
-            elif val >= 0.5:
-                return 'Average'
-            else:
-                return 'Poor'
-
-        # Parameter ratings
-        details = {}
-        limiting_factors = []
-        recommendations = []
-        score = 1.0
-
-        # Tree age
-        if 3 <= tree_age <= 15:
-            details['tree_age'] = {'status': 'Optimal', 'rating': 'Excellent'}
-            age_factor = 1.0
-        elif tree_age < 3:
-            details['tree_age'] = {'status': 'Young', 'rating': 'Average'}
-            limiting_factors.append('Tree is too young for optimal yield.')
-            recommendations.append('Focus on root development and proper pruning for young trees.')
-            age_factor = 0.6
-            score *= 0.6
-        else:
-            details['tree_age'] = {'status': 'Aging', 'rating': 'Good'}
-            limiting_factors.append('Tree is aging, yield may decline.')
-            recommendations.append('Consider rejuvenation pruning or replacement for old trees.')
-            age_factor = 0.8
-            score *= 0.8
-
-        # Flower buds
-        expected_buds = 100 if tree_age < 3 else 200 if tree_age < 10 else 150
-        if flower_buds_count >= expected_buds:
-            details['flower_buds_count'] = {'status': 'Good', 'rating': 'Excellent'}
-            bud_factor = 1.0
-        elif flower_buds_count >= expected_buds * 0.5:
-            details['flower_buds_count'] = {'status': 'Moderate', 'rating': 'Good'}
-            limiting_factors.append('Moderate flower bud count may limit yield.')
-            recommendations.append('Improve nutrition and management to increase bud count.')
-            bud_factor = 0.7
-            score *= 0.7
-        else:
-            details['flower_buds_count'] = {'status': 'Low', 'rating': 'Poor'}
-            limiting_factors.append('Low flower bud count is a major limiting factor.')
-            recommendations.append('Review pruning and ensure proper winter chilling.')
-            bud_factor = 0.4
-            score *= 0.4
-
-        # Leaf color
-        if leaf_color == 'Green':
-            details['leaf_color'] = {'status': 'Healthy', 'rating': 'Excellent'}
-            leaf_factor = 1.0
-        elif leaf_color == 'Yellow':
-            details['leaf_color'] = {'status': 'Deficiency/Stress', 'rating': 'Average'}
-            limiting_factors.append('Yellow leaves indicate stress or deficiency.')
-            recommendations.append('Check for nutrient deficiency or water stress.')
-            leaf_factor = 0.6
-            score *= 0.6
-        else:
-            details['leaf_color'] = {'status': 'Severe Stress/Disease', 'rating': 'Poor'}
-            limiting_factors.append('Brown leaves indicate severe stress or disease.')
-            recommendations.append('Inspect for pests, diseases, or root issues.')
-            leaf_factor = 0.3
-            score *= 0.3
-
-        # Soil moisture
-        if soil_moisture == 'Moderate':
-            details['soil_moisture'] = {'status': 'Optimal', 'rating': 'Excellent'}
-            moisture_factor = 1.0
-        else:
-            details['soil_moisture'] = {'status': 'Sub-optimal', 'rating': 'Good'}
-            limiting_factors.append('Soil moisture is not optimal.')
-            recommendations.append('Adjust irrigation to maintain moderate soil moisture.')
-            moisture_factor = 0.7
-            score *= 0.7
-
-        # Fertilizer
-        if fertilizer_used:
-            details['fertilizer_used'] = {'status': 'Applied', 'rating': 'Excellent'}
-            fert_factor = 1.0
-        else:
-            details['fertilizer_used'] = {'status': 'Not Applied', 'rating': 'Average'}
-            limiting_factors.append('No fertilizer applied, possible nutrient deficiency.')
-            recommendations.append('Apply balanced fertilizer as per recommendations.')
-            fert_factor = 0.5
-            score *= 0.5
-
-        # Final yield rating
-        yield_rating = to_rating(score)
-
-        # Expected yield range (farmer-friendly)
-        base_yield = {'minimum': 15, 'maximum': 30, 'expected': 22.5, 'unit': 'kg per tree'}
-        # Adjust for all factors
-        base = 1.0
-        for f in [age_factor, bud_factor, leaf_factor, moisture_factor, fert_factor]:
-            base *= f
-        base_yield = {
-            'minimum': round(15 * base, 1),
-            'maximum': round(30 * base, 1),
-            'expected': round(22.5 * base, 1),
-            'unit': 'kg per tree'
-        }
-
-        # Fruit quality prediction
-        fruit_quality = {
-            'size': 'Medium',
-            'color': 'Good',
-            'sweetness': 'Medium',
-            'firmness': 'Good',
-            'overall_quality': 'Good'
-        }
-        if leaf_color != 'Green' or soil_moisture != 'Moderate':
-            fruit_quality['color'] = 'Fair'
-            fruit_quality['overall_quality'] = 'Fair'
-        if not fertilizer_used:
-            fruit_quality['size'] = 'Small'
-            fruit_quality['sweetness'] = 'Low'
-            fruit_quality['overall_quality'] = 'Poor'
-
-        if not recommendations:
-            recommendations.append('Maintain current practices and monitor regularly.')
-
-        return YieldAnalysisResult(
-            rating=yield_rating,
-            expected_yield=base_yield,
-            details=details,
-            limiting_factors=limiting_factors,
-            fruit_quality=fruit_quality,
-            recommendations=recommendations
-        ).to_dict()
-        #comment

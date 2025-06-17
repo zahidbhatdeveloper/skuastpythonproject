@@ -11,6 +11,7 @@ import traceback
 import logging
 from yield_analysis import YieldAnalyzer
 from chemical_analysis import ChemicalAnalyzer
+from ml_predictor import MLPredictor
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -18,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="SKUAST Tree Analysis API",
-    description="API for analyzing fruit tree chemical and yield data",
+    description="API for analyzing fruit tree chemical and yield data using ML models",
     version="2.0.0"
 )
 
@@ -35,6 +36,7 @@ app.add_middleware(
 chemical_analyzer = ChemicalAnalyzer()
 yield_analyzer = YieldAnalyzer()
 disease_analyzer = TreeDiseaseAnalyzer()
+ml_predictor = MLPredictor()
 
 class TreeAnalysisResponse(BaseModel):
     tree_id: str
@@ -337,6 +339,42 @@ async def detect_tree_disease(tree_id: str, image: UploadFile = File(...)):
         logger.error(f"Traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/train/chemical")
+async def train_chemical_model(file: UploadFile = File(...)):
+    """Train chemical analysis ML model using uploaded data"""
+    try:
+        contents = await file.read()
+        df = pd.read_csv(io.StringIO(contents.decode('utf-8')))
+        
+        # Train the model
+        score = ml_predictor.train_chemical_model(df)
+        
+        return {
+            "message": "Chemical analysis model trained successfully",
+            "model_score": score
+        }
+    except Exception as e:
+        logger.error(f"Error training chemical model: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/train/yield")
+async def train_yield_model(file: UploadFile = File(...)):
+    """Train yield analysis ML model using uploaded data"""
+    try:
+        contents = await file.read()
+        df = pd.read_csv(io.StringIO(contents.decode('utf-8')))
+        
+        # Train the model
+        score = ml_predictor.train_yield_model(df)
+        
+        return {
+            "message": "Yield analysis model trained successfully",
+            "model_score": score
+        }
+    except Exception as e:
+        logger.error(f"Error training yield model: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.post("/analyze/chemical")
 async def analyze_chemical(
     request: Request,
@@ -358,13 +396,34 @@ async def analyze_chemical(
             moisture_level = data.get('moisture_level')
             chlorophyll_content = data.get('chlorophyll_content')
             nitrogen_level = data.get('nitrogen_level')
-        result = chemical_analyzer.analyze(
+
+        # Prepare input data for ML model
+        input_data = {
+            'leaf_color': leaf_color,
+            'soil_ph': float(soil_ph),
+            'moisture_level': moisture_level,
+            'chlorophyll_content': chlorophyll_content,
+            'nitrogen_level': nitrogen_level
+        }
+
+        # Get ML prediction
+        ml_result = ml_predictor.predict_chemical(input_data)
+        
+        # Get traditional analysis
+        traditional_result = chemical_analyzer.analyze(
             leaf_color, float(soil_ph), moisture_level, chlorophyll_content, nitrogen_level
         )
-        if "errors" in result:
-            raise HTTPException(status_code=400, detail=result["errors"])
+
+        # Combine results
+        result = {
+            **traditional_result,
+            'ml_prediction': ml_result['prediction'],
+            'feature_importance': ml_result['feature_importance']
+        }
+
         return result
     except Exception as e:
+        logger.error(f"Error in chemical analysis: {str(e)}")
         raise HTTPException(status_code=400, detail=str(e))
 
 @app.post("/analyze/yield")
@@ -388,16 +447,38 @@ async def analyze_yield(
             leaf_color = data.get('leaf_color')
             soil_moisture = data.get('soil_moisture')
             fertilizer_used = data.get('fertilizer_used')
+
         # Convert fertilizer_used to boolean if string
         if isinstance(fertilizer_used, str):
             fertilizer_used = fertilizer_used.lower() == 'true'
-        result = yield_analyzer.analyze(
+
+        # Prepare input data for ML model
+        input_data = {
+            'tree_age': float(tree_age),
+            'flower_buds_count': int(flower_buds_count),
+            'leaf_color': leaf_color,
+            'soil_moisture': soil_moisture,
+            'fertilizer_used': fertilizer_used
+        }
+
+        # Get ML prediction
+        ml_result = ml_predictor.predict_yield(input_data)
+        
+        # Get traditional analysis
+        traditional_result = yield_analyzer.analyze(
             float(tree_age), int(flower_buds_count), leaf_color, soil_moisture, fertilizer_used
         )
-        if "errors" in result:
-            raise HTTPException(status_code=400, detail=result["errors"])
+
+        # Combine results
+        result = {
+            **traditional_result,
+            'ml_prediction': ml_result['prediction'],
+            'feature_importance': ml_result['feature_importance']
+        }
+
         return result
     except Exception as e:
+        logger.error(f"Error in yield analysis: {str(e)}")
         raise HTTPException(status_code=400, detail=str(e))
 
 # if __name__ == "__main__":

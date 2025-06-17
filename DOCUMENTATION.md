@@ -1,200 +1,192 @@
-# Tree Chemical Evaluation Project Documentation
+# SKUAST Tree Analysis System Documentation
 
 ## Overview
-The Tree Chemical Evaluation Project is a comprehensive system for analyzing and evaluating chemical properties of trees, with a focus on fruit trees. The project provides tools for chemical analysis, yield prediction, disease detection, and environmental impact assessment.
+The SKUAST Tree Analysis System provides two main types of analysis:
+1. Chemical Analysis - Evaluates tree health based on chemical parameters
+2. Yield Analysis - Predicts and evaluates potential fruit yield
 
-## System Architecture
+## Chemical Analysis
 
-### Core Components
-1. **Chemical Analysis Module** (`chemical_analysis.py`)
-   - Provides chemical analysis for trees using 5 key parameters.
-   - Use the `/analyze/chemical` endpoint.
+### Input Parameters
+The chemical analysis accepts the following parameters:
+- `Leaf_Color`: String - Options: "Green", "Yellow", "Brown"
+- `Soil_pH`: Float - Range: 5.5 to 7.5
+- `Moisture_Level`: String - Options: "Low", "Medium", "High"
+- `Chlorophyll_Content`: String - Options: "Low", "Normal", "High"
+- `Nitrogen_Level`: String - Options: "Low", "Adequate", "High"
 
-2. **Yield Analysis Module** (`yield_analysis.py`)
-   - Provides yield analysis for trees using 5 key parameters.
-   - Use the `/analyze/yield` endpoint.
+### Analysis Process
+1. **Parameter Validation**
+   - Validates all input parameters
+   - Checks for required values and valid ranges
 
-3. **Disease Analysis Module** (`tree_disease_analyzer.py`)
-   - Disease detection
-   - Health monitoring
-   - Treatment recommendations
+2. **Chemical Compound Analysis**
+   The system analyzes several key compounds:
+   - Sugars (Optimal range: 2.5 - 4.0)
+   - Malic Acid (Optimal range: 0.8 - 1.5)
+   - Vitamin C (Optimal range: 0.4 - 0.8)
+   - Chlorophyll (Optimal range: 2.0 - 3.0)
+   - Anthocyanins (Optimal range: 3.5 - 4.5)
+   - Pectin (Optimal range: 1.2 - 1.8)
+   - Actinidin (Optimal range: 0.8 - 1.2)
+   - Fiber (Optimal range: 1.8 - 2.4)
 
-4. **API Interface** (`api.py`)
-   - RESTful API endpoints
-   - Data processing
-   - Integration services
+3. **Environmental Factors Analysis**
+   - pH Level (Optimal range: 6.0 - 7.0)
+   - Tree Age Assessment
+   - Soil Type Evaluation
+   - Fruit Stage Analysis
+   - Location Impact
 
-## Installation
+4. **Output Structure**
+   ```json
+   {
+     "chemical_compounds": {
+       "compound_name": {
+         "mean_concentration": float,
+         "range": "min - max",
+         "std_dev": float,
+         "cv_percent": float,
+         "optimal_range": "min - max",
+         "status": "Optimal/Sub-optimal"
+       }
+     },
+     "environmental_factors": {
+       "pH_level": {...},
+       "tree_age": {...},
+       "soil_type": string,
+       "fruit_stage": string,
+       "location": string
+     },
+     "overall_assessment": {
+       "health_score": float,
+       "status": string
+     },
+     "recommendations": [
+       {
+         "compound": string,
+         "issue": string,
+         "recommendation": string
+       }
+     ]
+   }
+   ```
 
-### Prerequisites
-- Python 3.8 or higher
-- pip (Python package manager)
+## Yield Analysis
 
-### Dependencies
-Install all required packages using:
-```bash
-pip install -r requirements.txt
-```
+### Input Parameters
+The yield analysis accepts the following parameters:
+- `Tree_Age`: Float - Age in years
+- `Flower_Buds_Count`: Integer - Number of flowers/fruit buds
+- `Leaf_Color`: String - Options: "Green", "Yellow", "Brown"
+- `Soil_Moisture`: String - Options: "Dry", "Moderate", "Wet"
+- `Fertilizer_Used`: Boolean - Yes/No
 
-Key dependencies include:
-- opencv-python (≥4.11.0)
-- numpy (≥1.24.0)
-- pandas (≥2.2.3)
-- scikit-learn (≥1.6.1)
-- FastAPI (≥0.40.0)
-- Flask (2.3.2)
-- Various visualization libraries (matplotlib, seaborn, plotly)
+### Analysis Process
+1. **Parameter Validation**
+   - Validates all input parameters
+   - Checks for required values and valid ranges
 
-## Project Structure
-```
-├── data/                      # Data storage directory
-├── main.py                    # Application entry point
-├── api.py                     # API implementation
-├── chemical_analysis.py       # Chemical analysis module
-├── yield_analysis.py          # Yield analysis module
-├── tree_disease_analyzer.py   # Disease analysis module
-├── requirements.txt           # Project dependencies
-└── README.md                  # Project overview
-```
+2. **Yield Factors Analysis**
+   - **Tree Age Assessment**
+     - Optimal: 3-15 years
+     - Young: < 3 years
+     - Aging: > 15 years
 
-## Core Features
+   - **Flower Buds Evaluation**
+     - Expected buds based on tree age
+     - Quality assessment of bud development
 
-### 1. Chemical Analysis
-- **Compound Analysis**
-  - Measurement of various chemical compounds
-  - Optimal range validation
-  - Statistical analysis
-  - Trend visualization
+   - **Leaf Health Analysis**
+     - Color indicates nutrient status
+     - Impact on photosynthesis and yield
 
-- **Health Assessment**
-  - Overall health scoring
-  - Chemical composition evaluation
-  - Status reporting
-  - Recommendations generation
+   - **Soil Moisture Assessment**
+     - Optimal: Moderate
+     - Impact on fruit development
 
-### 2. Yield Analysis
-- **Yield Prediction**
-  - Machine learning-based predictions
-  - Environmental factor consideration
-  - Historical data analysis
-  - Performance metrics
+   - **Fertilization Status**
+     - Impact on nutrient availability
+     - Effect on yield potential
 
-- **Growth Analysis**
-  - Growth rate calculation
-  - Development stage tracking
-  - Environmental impact assessment
-  - Optimization recommendations
+3. **Yield Prediction**
+   - Calculates expected yield range
+   - Predicts fruit quality parameters
+   - Identifies limiting factors
 
-### 3. Disease Analysis
-- **Disease Detection**
-  - Visual symptom analysis
-  - Chemical imbalance detection
-  - Early warning system
-  - Treatment recommendations
-
-### 4. Data Visualization
-- Chemical composition plots
-- Correlation heatmaps
-- Trend analysis graphs
-- Environmental impact visualizations
+4. **Output Structure**
+   ```json
+   {
+     "rating": "Excellent/Good/Average/Poor",
+     "expected_yield": {
+       "minimum": float,
+       "maximum": float,
+       "expected": float,
+       "unit": "kg per tree"
+     },
+     "details": {
+       "tree_age": {"status": string, "rating": string},
+       "flower_buds_count": {"status": string, "rating": string},
+       "leaf_color": {"status": string, "rating": string},
+       "soil_moisture": {"status": string, "rating": string},
+       "fertilizer_used": {"status": string, "rating": string}
+     },
+     "limiting_factors": [string],
+     "fruit_quality_prediction": {
+       "size": string,
+       "color": string,
+       "sweetness": string,
+       "firmness": string,
+       "overall_quality": string
+     },
+     "recommendations": [string]
+   }
+   ```
 
 ## API Endpoints
 
 ### Chemical Analysis
-- `POST /analyze/chemical`
-  - Analyzes chemical compounds
-  - Returns detailed analysis report
+- **Endpoint**: `/analyze/chemical`
+- **Method**: POST
+- **Content-Type**: application/json or application/x-www-form-urlencoded
 
 ### Yield Analysis
-- `POST /analyze/yield`
-  - Predicts yield
-  - Provides growth analysis
-
-### Disease Analysis
-- `POST /analyze/disease`
-  - Detects diseases
-  - Suggests treatments
-
-## Data Format
-
-### Input Data Structure
-CSV files should contain the following columns:
-- Tree ID
-- Tree Species
-- Chemical Compound
-- Concentration
-- Measurement Date
-- Location
-
-### Output Format
-Analysis results are provided in:
-- Tabular format
-- JSON responses (API)
-- Visualization plots
-- PDF reports
+- **Endpoint**: `/analyze/yield`
+- **Method**: POST
+- **Content-Type**: application/json or application/x-www-form-urlencoded
 
 ## Usage Examples
 
-### Chemical Analysis
-```python
-from chemical_analysis import analyze_chemical_compounds
-
-analyze_chemical_compounds(tree_id='T001')
+### Chemical Analysis Request
+```json
+{
+  "leaf_color": "Green",
+  "soil_ph": 6.5,
+  "moisture_level": "Medium",
+  "chlorophyll_content": "Normal",
+  "nitrogen_level": "Adequate"
+}
 ```
 
-### Yield Analysis
-```python
-from yield_analysis import analyze_yield
-
-analyze_yield(tree_id='T001')
+### Yield Analysis Request
+```json
+{
+  "tree_age": 5.0,
+  "flower_buds_count": 150,
+  "leaf_color": "Green",
+  "soil_moisture": "Moderate",
+  "fertilizer_used": true
+}
 ```
+
+## Error Handling
+- Invalid parameter values return 400 Bad Request
+- Missing required parameters return 400 Bad Request
+- Server errors return 500 Internal Server Error
 
 ## Best Practices
-
-### Data Collection
-1. Regular sampling intervals
-2. Consistent measurement methods
-3. Proper data validation
-4. Environmental factor recording
-
-### Analysis
-1. Regular health assessments
-2. Trend monitoring
-3. Cross-validation of results
-4. Documentation of findings
-
-### Maintenance
-1. Regular dependency updates
-2. Data backup procedures
-3. System monitoring
-4. Performance optimization
-
-## Troubleshooting
-
-### Common Issues
-1. Data loading errors
-   - Check file format
-   - Verify data structure
-   - Ensure proper permissions
-
-2. Analysis errors
-   - Validate input data
-   - Check system resources
-   - Verify dependencies
-
-3. API issues
-   - Check endpoint availability
-   - Verify request format
-   - Monitor server status
-
-## Contributing
-1. Fork the repository
-2. Create a feature branch
-3. Commit changes
-4. Submit pull request
-
-## License
-[Specify your license here]
-
-## Support
-For support and questions, please [specify contact information] 
+1. Always validate input parameters before sending
+2. Monitor soil moisture regularly
+3. Maintain proper fertilization schedule
+4. Regular leaf color monitoring
+5. Keep track of tree age and development stage 

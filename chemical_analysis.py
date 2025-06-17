@@ -1,4 +1,7 @@
 import enum
+import pandas as pd
+import numpy as np
+from ml_predictor import MLPredictor
 
 class ChemicalAnalysisResult:
     def __init__(self, health_score, status, details, recommendations):
@@ -21,87 +24,167 @@ class ChemicalAnalyzer:
     CHLOROPHYLL_CONTENTS = ['Low', 'Normal', 'High']
     NITROGEN_LEVELS = ['Low', 'Adequate', 'High']
 
+    def __init__(self):
+        self.data = None
+        self.ml_predictor = MLPredictor()
+        
+    def load_data(self, file_path):
+        """Load chemical analysis data"""
+        if isinstance(file_path, str):
+            self.data = pd.read_csv(file_path)
+        else:
+            self.data = pd.read_csv(file_path)
+    
     def analyze(self, leaf_color, soil_ph, moisture_level, chlorophyll_content, nitrogen_level):
-        errors = []
-        if leaf_color not in self.LEAF_COLORS:
-            errors.append(f"Invalid leaf_color: {leaf_color}")
-        if not (5.5 <= soil_ph <= 7.5):
-            errors.append(f"soil_ph must be between 5.5 and 7.5")
-        if moisture_level not in self.MOISTURE_LEVELS:
-            errors.append(f"Invalid moisture_level: {moisture_level}")
-        if chlorophyll_content not in self.CHLOROPHYLL_CONTENTS:
-            errors.append(f"Invalid chlorophyll_content: {chlorophyll_content}")
-        if nitrogen_level not in self.NITROGEN_LEVELS:
-            errors.append(f"Invalid nitrogen_level: {nitrogen_level}")
-        if errors:
-            return {'errors': errors}
-
-        # Scoring logic
-        score = 1.0
-        details = {}
-        recommendations = []
-
-        # Leaf color
-        if leaf_color == 'Green':
-            details['leaf_color'] = {'status': 'Healthy', 'score': 1.0}
-        elif leaf_color == 'Yellow':
-            details['leaf_color'] = {'status': 'Deficiency/Stress', 'score': 0.6}
-            recommendations.append('Investigate possible nutrient deficiency or water stress causing yellow leaves.')
-            score *= 0.6
-        else:
-            details['leaf_color'] = {'status': 'Severe Stress/Disease', 'score': 0.3}
-            recommendations.append('Brown leaves indicate severe stress or disease. Inspect for pests or root issues.')
-            score *= 0.3
-
-        # Soil pH
-        if 6.0 <= soil_ph <= 7.0:
-            details['soil_ph'] = {'status': 'Optimal', 'score': 1.0}
-        else:
-            details['soil_ph'] = {'status': 'Sub-optimal', 'score': 0.7}
-            recommendations.append('Adjust soil pH to 6.0-7.0 for optimal nutrient uptake.')
-            score *= 0.7
-
-        # Moisture
-        if moisture_level == 'Medium':
-            details['moisture_level'] = {'status': 'Optimal', 'score': 1.0}
-        else:
-            details['moisture_level'] = {'status': 'Sub-optimal', 'score': 0.7}
-            recommendations.append('Adjust irrigation to maintain medium soil moisture.')
-            score *= 0.7
-
-        # Chlorophyll
-        if chlorophyll_content == 'Normal' or chlorophyll_content == 'High':
-            details['chlorophyll_content'] = {'status': 'Good', 'score': 1.0}
-        else:
-            details['chlorophyll_content'] = {'status': 'Low', 'score': 0.6}
-            recommendations.append('Low chlorophyll content: consider nitrogen fertilization and check sunlight exposure.')
-            score *= 0.6
-
-        # Nitrogen
-        if nitrogen_level == 'Adequate' or nitrogen_level == 'High':
-            details['nitrogen_level'] = {'status': 'Sufficient', 'score': 1.0}
-        else:
-            details['nitrogen_level'] = {'status': 'Low', 'score': 0.6}
-            recommendations.append('Apply nitrogen-rich fertilizer as per recommendations.')
-            score *= 0.6
-
-        # Final health score and status
-        health_score = round(score * 100, 1)
+        """Analyze chemical parameters using ML model"""
+        try:
+            # Prepare input data
+            input_data = {
+                'leaf_color': leaf_color,
+                'soil_ph': float(soil_ph),
+                'moisture_level': moisture_level,
+                'chlorophyll_content': chlorophyll_content,
+                'nitrogen_level': nitrogen_level
+            }
+            
+            # Get ML prediction
+            ml_result = self.ml_predictor.predict_chemical(input_data)
+            
+            # Calculate chemical compounds based on ML prediction
+            health_score = ml_result['prediction']
+            feature_importance = ml_result['feature_importance']
+            
+            # Generate chemical compounds based on health score and feature importance
+            compounds = {
+                'sugars': self._calculate_compound_value(health_score, feature_importance.get('soil_ph', 0), 2.5, 4.0),
+                'malic_acid': self._calculate_compound_value(health_score, feature_importance.get('moisture_level', 0), 0.8, 1.5),
+                'vitamin_c': self._calculate_compound_value(health_score, feature_importance.get('chlorophyll_content', 0), 0.4, 0.8),
+                'chlorophyll': self._calculate_compound_value(health_score, feature_importance.get('leaf_color', 0), 2.0, 3.0),
+                'anthocyanins': self._calculate_compound_value(health_score, feature_importance.get('nitrogen_level', 0), 3.5, 4.5),
+                'pectin': self._calculate_compound_value(health_score, feature_importance.get('soil_ph', 0), 1.2, 1.8),
+                'actinidin': self._calculate_compound_value(health_score, feature_importance.get('nitrogen_level', 0), 0.8, 1.2),
+                'fiber': self._calculate_compound_value(health_score, feature_importance.get('moisture_level', 0), 1.8, 2.4)
+            }
+            
+            # Generate recommendations based on feature importance
+            recommendations = self._generate_recommendations(compounds, feature_importance, input_data)
+            
+            return {
+                'chemical_compounds': compounds,
+                'environmental_factors': {
+                    'pH_level': {
+                        'value': soil_ph,
+                        'status': 'Optimal' if 6.0 <= soil_ph <= 7.0 else 'Sub-optimal'
+                    },
+                    'moisture_level': {
+                        'value': moisture_level,
+                        'status': 'Optimal' if moisture_level == 'Medium' else 'Sub-optimal'
+                    },
+                    'chlorophyll_content': {
+                        'value': chlorophyll_content,
+                        'status': 'Optimal' if chlorophyll_content == 'Normal' else 'Sub-optimal'
+                    },
+                    'nitrogen_level': {
+                        'value': nitrogen_level,
+                        'status': 'Optimal' if nitrogen_level == 'Adequate' else 'Sub-optimal'
+                    }
+                },
+                'overall_assessment': {
+                    'health_score': health_score,
+                    'status': self._get_health_status(health_score)
+                },
+                'recommendations': recommendations
+            }
+            
+        except Exception as e:
+            return {"errors": str(e)}
+    
+    def _calculate_compound_value(self, health_score, feature_importance, min_val, max_val):
+        """Calculate compound value based on health score and feature importance"""
+        base_value = min_val + (max_val - min_val) * (health_score / 100)
+        # Adjust based on feature importance
+        adjustment = (max_val - min_val) * 0.1 * feature_importance
+        return round(base_value + adjustment, 2)
+    
+    def _get_health_status(self, health_score):
+        """Get health status based on score"""
         if health_score >= 90:
-            status = 'Excellent'
-        elif health_score >= 70:
-            status = 'Good'
-        elif health_score >= 50:
-            status = 'Fair'
+            return "Excellent - All chemical parameters are within optimal ranges"
+        elif health_score >= 75:
+            return "Good - Most chemical parameters are within optimal ranges"
+        elif health_score >= 60:
+            return "Fair - Some chemical parameters need attention"
         else:
-            status = 'Poor'
-
-        if not recommendations:
-            recommendations.append('Maintain current practices and monitor regularly.')
-
-        return ChemicalAnalysisResult(
-            health_score=health_score,
-            status=status,
-            details=details,
-            recommendations=recommendations
-        ).to_dict() 
+            return "Poor - Multiple chemical parameters need attention"
+    
+    def _generate_recommendations(self, compounds, feature_importance, input_data):
+        """Generate recommendations based on compound values and feature importance"""
+        recommendations = []
+        
+        # Check each compound against optimal ranges
+        optimal_ranges = {
+            'sugars': (2.5, 4.0),
+            'malic_acid': (0.8, 1.5),
+            'vitamin_c': (0.4, 0.8),
+            'chlorophyll': (2.0, 3.0),
+            'anthocyanins': (3.5, 4.5),
+            'pectin': (1.2, 1.8),
+            'actinidin': (0.8, 1.2),
+            'fiber': (1.8, 2.4)
+        }
+        
+        for compound, (min_val, max_val) in optimal_ranges.items():
+            value = compounds[compound]
+            if value < min_val:
+                recommendations.append({
+                    'compound': compound,
+                    'issue': f"{compound.replace('_', ' ').title()} levels are low",
+                    'recommendation': self._get_recommendation(compound, 'low', input_data)
+                })
+            elif value > max_val:
+                recommendations.append({
+                    'compound': compound,
+                    'issue': f"{compound.replace('_', ' ').title()} levels are high",
+                    'recommendation': self._get_recommendation(compound, 'high', input_data)
+                })
+        
+        return recommendations
+    
+    def _get_recommendation(self, compound, level, input_data):
+        """Get specific recommendation based on compound and level"""
+        recommendations = {
+            'sugars': {
+                'low': 'Consider adjusting fertilization and irrigation.',
+                'high': 'Reduce sugar application and monitor water levels.'
+            },
+            'malic_acid': {
+                'low': 'Review fruit maturity and harvest timing.',
+                'high': 'Check fruit development stage and storage conditions.'
+            },
+            'vitamin_c': {
+                'low': 'Check sunlight exposure and nutrient balance.',
+                'high': 'Monitor fruit development and storage conditions.'
+            },
+            'chlorophyll': {
+                'low': 'Review leaf health and nutrient uptake.',
+                'high': 'Check for excessive nitrogen application.'
+            },
+            'anthocyanins': {
+                'low': 'Check light exposure and temperature conditions.',
+                'high': 'Monitor fruit development and storage conditions.'
+            },
+            'pectin': {
+                'low': 'Review fruit development stage and harvest timing.',
+                'high': 'Check fruit maturity and storage conditions.'
+            },
+            'actinidin': {
+                'low': 'Check fruit ripeness and storage conditions.',
+                'high': 'Monitor fruit development and storage conditions.'
+            },
+            'fiber': {
+                'low': 'Review fruit development and harvest timing.',
+                'high': 'Check fruit maturity and storage conditions.'
+            }
+        }
+        
+        return recommendations.get(compound, {}).get(level, 'Monitor and adjust growing conditions.') 
